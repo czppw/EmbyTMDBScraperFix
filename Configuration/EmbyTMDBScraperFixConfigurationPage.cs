@@ -1,9 +1,33 @@
+using System;
+using System.IO;
+using System.Reflection;
+using MediaBrowser.Common.Plugins;
+using MediaBrowser.Controller.Plugins;
+using MediaBrowser.Model.Plugins;
+
 namespace EmbyTMDBScraperFix.Configuration;
 
 /// <summary>
-/// The plugin configuration page is now registered from <see cref="EmbyTMDBScraperFix.Plugin" /> via IHasWebPages.
-/// This file is intentionally kept as a no-op marker so the embedded HTML resource remains in the project structure.
+/// Dashboard configuration page for Emby plugin details view.
 /// </summary>
-internal static class ConfigurationPageMarker
+public sealed class EmbyTMDBScraperFixConfigurationPage : IPluginConfigurationPage
 {
+    private const string ResourceName = "EmbyTMDBScraperFix.Web.configuration.html";
+
+    public string Name => EmbyTMDBScraperFix.Plugin.PluginDisplayName;
+
+    public ConfigurationPageType ConfigurationPageType => ConfigurationPageType.PluginConfiguration;
+
+    public IPlugin Plugin => EmbyTMDBScraperFix.Plugin.Instance ?? throw new InvalidOperationException("Plugin instance is not available.");
+
+    public Stream GetHtmlStream()
+    {
+        var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourceName);
+        if (stream == null)
+        {
+            throw new FileNotFoundException($"Embedded resource not found: {ResourceName}");
+        }
+
+        return stream;
+    }
 }
