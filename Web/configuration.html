@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EmbyTMDBScraperFix</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f5f5;
+      color: #222;
+      font-size: 14px;
+    }
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 2em 1.5em 4em;
+    }
+    h1 {
+      margin: 0 0 .25em;
+      font-size: 1.8em;
+      font-weight: 400;
+      color: #222;
+    }
+    .page-description {
+      color: #666;
+      margin: 0 0 2em;
+      line-height: 1.55;
+    }
+    .section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      margin: 0 0 1.5em;
+      padding: 1.5em;
+    }
+    .section h2 {
+      margin: 0 0 1.25em;
+      font-size: 1.25em;
+      font-weight: 400;
+      color: #333;
+      border-bottom: 1px solid #eee;
+      padding-bottom: .75em;
+    }
+    .inputContainer {
+      margin: 0 0 1.25em;
+    }
+    label {
+      display: block;
+      margin-bottom: .35em;
+      color: #333;
+      font-weight: 500;
+    }
+    .fieldDescription {
+      color: #777;
+      font-size: .92em;
+      line-height: 1.5;
+      margin-top: .35em;
+    }
+    input[type="text"], input[type="password"], input[type="number"] {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      padding: .65em .75em;
+      background: #fff;
+      color: #222;
+      font-size: 1em;
+      outline: none;
+    }
+    input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus {
+      border-color: #52b54b;
+      box-shadow: 0 0 0 1px #52b54b;
+    }
+    .checkboxContainer {
+      display: flex;
+      align-items: flex-start;
+      gap: .7em;
+      margin: 0 0 1em;
+    }
+    .checkboxContainer input {
+      margin-top: .2em;
+    }
+    .checkboxText {
+      line-height: 1.45;
+    }
+    .formGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1em 1.25em;
+    }
+    .full {
+      grid-column: 1 / -1;
+    }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .75em;
+      margin-top: .5em;
+    }
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 3px;
+      padding: .75em 1.25em;
+      background: #52b54b;
+      color: #fff;
+      font-size: 1em;
+      font-weight: 500;
+    }
+    button:hover { background: #449b3f; }
+    button.secondary {
+      background: #666;
+    }
+    button.secondary:hover { background: #555; }
+    button.subtle {
+      background: #e5e5e5;
+      color: #333;
+    }
+    button.subtle:hover { background: #d7d7d7; }
+    .statusBox {
+      margin-top: 1em;
+      border: 1px solid #ddd;
+      background: #fafafa;
+      padding: .9em 1em;
+      border-radius: 3px;
+      color: #333;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+    .statusBox.error {
+      border-color: #d9534f;
+      background: #fff4f4;
+      color: #a94442;
+    }
+    .statusBox.warning {
+      border-color: #f0ad4e;
+      background: #fff9ed;
+      color: #8a6d3b;
+    }
+    .libraryList {
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      background: #fff;
+    }
+    .libraryItem {
+      display: flex;
+      gap: .75em;
+      padding: .9em 1em;
+      border-bottom: 1px solid #eee;
+      align-items: flex-start;
+    }
+    .libraryItem:last-child { border-bottom: 0; }
+    .libraryName {
+      font-weight: 500;
+      color: #333;
+    }
+    .libraryPath {
+      color: #777;
+      font-size: .9em;
+      margin-top: .2em;
+      word-break: break-all;
+    }
+    .twoColumnNote {
+      color: #777;
+      font-size: .92em;
+      margin-top: .5em;
+      line-height: 1.5;
+    }
+    .dangerText { color: #b94a48; }
+    @media (max-width: 760px) {
+      .formGrid { grid-template-columns: 1fr; }
+      .page { padding: 1.25em 1em 3em; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>EmbyTMDBScraperFix</h1>
+    <p class="page-description">
+      配置 TMDB 自定义刮削器、HTTP 代理和自动增量扫描。建议在媒体库的元数据提供器中选择本插件作为 TMDB 刮削来源。
+    </p>
+
+    <div class="section">
+      <h2>TMDB 设置</h2>
+      <div class="inputContainer">
+        <label for="tmdbApiKey">TMDB API Key</label>
+        <input id="tmdbApiKey" type="password" autocomplete="off" />
+        <div class="fieldDescription">用于访问 TMDB API。插件作为可选刮削器时需要此项。</div>
+      </div>
+      <div class="formGrid">
+        <div class="inputContainer">
+          <label for="tmdbLanguage">元数据语言</label>
+          <input id="tmdbLanguage" type="text" placeholder="zh-CN" />
+        </div>
+        <div class="inputContainer">
+          <label for="tmdbRegion">区域</label>
+          <input id="tmdbRegion" type="text" placeholder="CN" />
+        </div>
+      </div>
+      <label class="checkboxContainer">
+        <input id="enableAdultMetadata" type="checkbox" />
+        <span class="checkboxText">启用成人元数据搜索</span>
+      </label>
+    </div>
+
+    <div class="section">
+      <h2>HTTP 代理</h2>
+      <label class="checkboxContainer">
+        <input id="proxyEnabled" type="checkbox" />
+        <span class="checkboxText">启用 HTTP 代理</span>
+      </label>
+      <div class="formGrid">
+        <div class="inputContainer full">
+          <label for="proxyHost">代理地址</label>
+          <input id="proxyHost" type="text" placeholder="127.0.0.1" />
+        </div>
+        <div class="inputContainer">
+          <label for="proxyPort">代理端口</label>
+          <input id="proxyPort" type="number" min="1" max="65535" placeholder="7890" />
+        </div>
+        <div class="inputContainer">
+          <label for="proxyUsername">用户名</label>
+          <input id="proxyUsername" type="text" autocomplete="off" />
+        </div>
+        <div class="inputContainer">
+          <label for="proxyPassword">密码</label>
+          <input id="proxyPassword" type="password" autocomplete="off" />
+        </div>
+      </div>
+      <label class="checkboxContainer">
+        <input id="enableLegacyGlobalProxyHook" type="checkbox" />
+        <span class="checkboxText">
+          启用旧版全局代理 Hook（高风险）
+          <div class="fieldDescription dangerText">仅在必须尝试影响 Emby 内置请求时使用。推荐使用“媒体库选择本插件作为刮削器”的方式。</div>
+        </span>
+      </label>
+      <div class="buttons">
+        <button id="btnTestProxy" class="secondary" type="button">测试代理</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>自动增量扫描</h2>
+      <label class="checkboxContainer">
+        <input id="autoScanEnabled" type="checkbox" />
+        <span class="checkboxText">启用自动增量扫描</span>
+      </label>
+      <label class="checkboxContainer">
+        <input id="autoMetadataRefresh" type="checkbox" />
+        <span class="checkboxText">检测到变化后自动刷新元数据</span>
+      </label>
+      <div class="formGrid">
+        <div class="inputContainer">
+          <label for="scanIntervalMinutes">扫描间隔（分钟）</label>
+          <input id="scanIntervalMinutes" type="number" min="1" value="10" />
+          <div class="fieldDescription">默认 10 分钟。</div>
+        </div>
+        <div class="inputContainer">
+          <label for="maxScrapeRetryCount">刮削失败最大重试次数</label>
+          <input id="maxScrapeRetryCount" type="number" min="0" value="3" />
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>媒体库</h2>
+      <p class="twoColumnNote">选择需要自动增量扫描的媒体库路径。若列表为空，请确认 Emby 已创建媒体库并重启服务。</p>
+      <div id="libraryList" class="libraryList"></div>
+    </div>
+
+    <div class="section">
+      <h2>保存与状态</h2>
+      <div class="buttons">
+        <button id="btnSave" type="button">保存</button>
+        <button id="btnReload" class="subtle" type="button">重新加载</button>
+        <button id="btnLogs" class="subtle" type="button">查看最近日志</button>
+      </div>
+      <div id="status" class="statusBox">正在加载配置...</div>
+    </div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const state = { config: null, libraries: [] };
+
+    function setStatus(message, type) {
+      const box = $('status');
+      box.className = 'statusBox' + (type ? ' ' + type : '');
+      box.textContent = message;
+    }
+
+    async function api(path, method, body) {
+      const opts = { method: method || 'GET', headers: {} };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(path, opts);
+      if (!res.ok) throw new Error(await res.text());
+      const text = await res.text();
+      return text ? JSON.parse(text) : null;
+    }
+
+    function getBool(id) { return $(id).checked; }
+    function setBool(id, value) { $(id).checked = !!value; }
+    function intValue(id, fallback) {
+      const value = parseInt($(id).value, 10);
+      return Number.isFinite(value) ? value : fallback;
+    }
+
+    function fillForm(cfg) {
+      state.config = cfg || {};
+      setBool('proxyEnabled', cfg.ProxyEnabled);
+      $('proxyHost').value = cfg.ProxyHost || '';
+      $('proxyPort').value = cfg.ProxyPort || 7890;
+      $('proxyUsername').value = cfg.ProxyUsername || '';
+      $('proxyPassword').value = cfg.ProxyPassword || '';
+      setBool('enableLegacyGlobalProxyHook', cfg.EnableLegacyGlobalProxyHook);
+      $('tmdbApiKey').value = cfg.TmdbApiKey || '';
+      $('tmdbLanguage').value = cfg.TmdbLanguage || 'zh-CN';
+      $('tmdbRegion').value = cfg.TmdbRegion || 'CN';
+      setBool('enableAdultMetadata', cfg.EnableAdultMetadata);
+      setBool('autoScanEnabled', cfg.AutoScanEnabled !== false);
+      setBool('autoMetadataRefresh', cfg.AutoMetadataRefresh !== false);
+      $('scanIntervalMinutes').value = cfg.ScanIntervalMinutes || 10;
+      $('maxScrapeRetryCount').value = cfg.MaxScrapeRetryCount || 3;
+    }
+
+    function renderLibraries() {
+      const list = $('libraryList');
+      list.innerHTML = '';
+      if (!state.libraries.length) {
+        list.innerHTML = '<div class="libraryItem"><div class="libraryPath">未获取到媒体库。</div></div>';
+        return;
+      }
+      state.libraries.forEach(lib => {
+        const row = document.createElement('label');
+        row.className = 'libraryItem';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = lib.Enabled !== false;
+        cb.addEventListener('change', () => lib.Enabled = cb.checked);
+        const text = document.createElement('div');
+        text.innerHTML = '<div class="libraryName"></div><div class="libraryPath"></div>';
+        text.querySelector('.libraryName').textContent = lib.Name || '未命名媒体库';
+        text.querySelector('.libraryPath').textContent = lib.Path || lib.Id || '';
+        row.appendChild(cb);
+        row.appendChild(text);
+        list.appendChild(row);
+      });
+    }
+
+    async function loadConfig() {
+      const cfg = await api('/EmbyTMDBScraperFix/Configuration');
+      fillForm(cfg || {});
+    }
+
+    async function loadLibraries() {
+      const libs = await api('/EmbyTMDBScraperFix/Libraries');
+      state.libraries = libs || [];
+      renderLibraries();
+    }
+
+    function buildPayload() {
+      return {
+        ProxyEnabled: getBool('proxyEnabled'),
+        ProxyHost: $('proxyHost').value.trim(),
+        ProxyPort: intValue('proxyPort', 7890),
+        ProxyUsername: $('proxyUsername').value,
+        ProxyPassword: $('proxyPassword').value,
+        EnableLegacyGlobalProxyHook: getBool('enableLegacyGlobalProxyHook'),
+        TmdbApiKey: $('tmdbApiKey').value.trim(),
+        TmdbLanguage: $('tmdbLanguage').value.trim() || 'zh-CN',
+        TmdbRegion: $('tmdbRegion').value.trim() || 'CN',
+        EnableAdultMetadata: getBool('enableAdultMetadata'),
+        AutoScanEnabled: getBool('autoScanEnabled'),
+        AutoMetadataRefresh: getBool('autoMetadataRefresh'),
+        ScanIntervalMinutes: intValue('scanIntervalMinutes', 10),
+        MaxScrapeRetryCount: intValue('maxScrapeRetryCount', 3),
+        Libraries: state.libraries.map(x => ({ Id: x.Id || '', Name: x.Name || '', Path: x.Path || '', Enabled: x.Enabled !== false }))
+      };
+    }
+
+    async function saveConfig() {
+      setStatus('正在保存配置...');
+      const cfg = await api('/EmbyTMDBScraperFix/Configuration', 'POST', buildPayload());
+      fillForm(cfg || {});
+      setStatus('配置已保存。');
+    }
+
+    async function testProxy() {
+      setStatus('正在测试代理...');
+      const result = await api('/EmbyTMDBScraperFix/TestProxy', 'POST', {});
+      const lines = (result.Items || []).map(x => `${x.Success ? '成功' : '失败'}：${x.Url} ${x.Message || ''}`);
+      setStatus(lines.join('\n') || '测试完成。', result.Success ? '' : 'warning');
+    }
+
+    async function showLogs() {
+      const logs = await api('/EmbyTMDBScraperFix/Logs?Limit=20');
+      const lines = (logs || []).map(x => `${x.Time || ''} [${x.Level || ''}] ${x.Message || ''}`);
+      setStatus(lines.join('\n') || '暂无日志。');
+    }
+
+    async function reloadAll() {
+      setStatus('正在加载配置...');
+      await loadConfig();
+      await loadLibraries();
+      setStatus('配置已加载。');
+    }
+
+    $('btnSave').addEventListener('click', () => saveConfig().catch(e => setStatus('保存失败：' + e.message, 'error')));
+    $('btnReload').addEventListener('click', () => reloadAll().catch(e => setStatus('加载失败：' + e.message, 'error')));
+    $('btnTestProxy').addEventListener('click', () => testProxy().catch(e => setStatus('测试失败：' + e.message, 'error')));
+    $('btnLogs').addEventListener('click', () => showLogs().catch(e => setStatus('日志读取失败：' + e.message, 'error')));
+
+    reloadAll().catch(e => setStatus('初始化失败：' + e.message, 'error'));
+  </script>
+</body>
+</html>
