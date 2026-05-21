@@ -35,7 +35,7 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
             DisplayName = PluginDisplayName,
             MenuIcon = "tv",
             MenuSection = "server",
-            EmbeddedResourcePath = GetType().Namespace + ".Web.configuration.html"
+            EmbeddedResourcePath = "EmbyTMDBScraperFix.Web.configuration.html"
         };
     }
 }
