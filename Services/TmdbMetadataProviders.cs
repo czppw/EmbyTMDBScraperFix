@@ -243,14 +243,15 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
             var tvdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tvdb", out var tvdbProviderId) ? tvdbProviderId : null;
             if (string.IsNullOrWhiteSpace(tvdbId))
             {
-            var search = await _tvdb.SearchSeriesAsync(info.Name ?? string.Empty, cfg, cancellationToken).ConfigureAwait(false);
-            var first = search?.Data?.FirstOrDefault();
-            tvdbId = first?.TvdbId ?? first?.Id;
+                var search = await _tvdb.SearchSeriesAsync(info.Name ?? string.Empty, cfg, cancellationToken).ConfigureAwait(false);
+                var first = search?.Data?.FirstOrDefault();
+                tvdbId = first?.TvdbId ?? first?.Id;
             }
 
             if (!string.IsNullOrWhiteSpace(tvdbId))
             {
-                var tvdbData = await _tvdb.GetSeriesAsync(tvdbId, cfg, cancellationToken).ConfigureAwait(false);
+                var safeTvdbId = tvdbId;
+                var tvdbData = await _tvdb.GetSeriesAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
                 if (tvdbData?.Data != null)
                 {
                     var item = new Series
@@ -293,7 +294,8 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
         var tvdbId = item.ProviderIds.TryGetValue("Tvdb", out var tvdbProviderId) ? tvdbProviderId : null;
         if (!string.IsNullOrWhiteSpace(tvdbId) && cfg.EnableTvdbFallback)
         {
-            var data = await _tvdb.GetSeriesAsync(tvdbId, cfg, cancellationToken).ConfigureAwait(false);
+            var safeTvdbId = tvdbId;
+            var data = await _tvdb.GetSeriesAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data?.Data != null)
             {
                 return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
@@ -339,12 +341,14 @@ public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season,
         if (string.IsNullOrWhiteSpace(tmdbSeriesId) && !string.IsNullOrWhiteSpace(info.SeriesName))
         {
             var search = await _tmdb.SearchSeriesAsync(info.SeriesName, info.Year, cfg, cancellationToken).ConfigureAwait(false);
-            tmdbSeriesId = search?.Results?.FirstOrDefault()?.Id.ToString(CultureInfo.InvariantCulture);
+            var firstTmdb = search?.Results?.FirstOrDefault();
+            tmdbSeriesId = firstTmdb != null ? firstTmdb.Id.ToString(CultureInfo.InvariantCulture) : null;
         }
 
         if (!string.IsNullOrWhiteSpace(tmdbSeriesId))
         {
-            var data = await _tmdb.GetSeasonAsync(tmdbSeriesId, info.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
+            var safeTmdbSeriesId = tmdbSeriesId;
+            var data = await _tmdb.GetSeasonAsync(safeTmdbSeriesId, info.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
                 var item = new Season
@@ -377,7 +381,8 @@ public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season,
 
             if (!string.IsNullOrWhiteSpace(tvdbSeriesId))
             {
-                var series = await _tvdb.GetSeriesAsync(tvdbSeriesId, cfg, cancellationToken).ConfigureAwait(false);
+                var safeTvdbSeriesId = tvdbSeriesId;
+                var series = await _tvdb.GetSeriesAsync(safeTvdbSeriesId, cfg, cancellationToken).ConfigureAwait(false);
                 var seasonSummary = series?.Data?.Seasons?.FirstOrDefault(x => x.Number == info.IndexNumber.Value);
                 if (seasonSummary != null)
                 {
@@ -415,7 +420,8 @@ public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season,
             var tmdbSeriesId = seasonItem.Series?.ProviderIds.TryGetValue("Tmdb", out var sid) == true ? sid : null;
             if (!string.IsNullOrWhiteSpace(tmdbSeriesId))
             {
-                var data = await _tmdb.GetSeasonAsync(tmdbSeriesId, seasonItem.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
+                var safeTmdbSeriesId = tmdbSeriesId;
+                var data = await _tmdb.GetSeasonAsync(safeTmdbSeriesId, seasonItem.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
                 if (data != null)
                 {
                     return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
@@ -427,7 +433,8 @@ public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season,
         var tvdbId = item.ProviderIds.TryGetValue("Tvdb", out var tvdbProviderId) ? tvdbProviderId : null;
         if (!string.IsNullOrWhiteSpace(tvdbId) && cfg.EnableTvdbFallback)
         {
-            var season = await _tvdb.GetSeasonAsync(tvdbId, cfg, cancellationToken).ConfigureAwait(false);
+            var safeTvdbId = tvdbId;
+            var season = await _tvdb.GetSeasonAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (season?.Data != null)
             {
                 return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
@@ -471,7 +478,8 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
         if (info.SeriesProviderIds != null) info.SeriesProviderIds.TryGetValue("Tmdb", out seriesTmdbId);
         if (!string.IsNullOrWhiteSpace(seriesTmdbId))
         {
-            var data = await _tmdb.GetEpisodeAsync(seriesTmdbId, info.ParentIndexNumber.Value, info.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
+            var safeSeriesTmdbId = seriesTmdbId;
+            var data = await _tmdb.GetEpisodeAsync(safeSeriesTmdbId, info.ParentIndexNumber.Value, info.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
                 var item = new Episode
@@ -497,12 +505,14 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
             if (string.IsNullOrWhiteSpace(tvdbSeriesId) && !string.IsNullOrWhiteSpace(info.Name))
             {
                 var seriesSearch = await _tvdb.SearchSeriesAsync(info.Name, cfg, cancellationToken).ConfigureAwait(false);
-                tvdbSeriesId = seriesSearch?.Data?.FirstOrDefault()?.TvdbId ?? seriesSearch?.Data?.FirstOrDefault()?.Id;
+                var firstSeries = seriesSearch?.Data?.FirstOrDefault();
+                tvdbSeriesId = firstSeries?.TvdbId ?? firstSeries?.Id;
             }
 
             if (!string.IsNullOrWhiteSpace(tvdbSeriesId))
             {
-                var series = await _tvdb.GetSeriesAsync(tvdbSeriesId, cfg, cancellationToken).ConfigureAwait(false);
+                var safeTvdbSeriesId = tvdbSeriesId;
+                var series = await _tvdb.GetSeriesAsync(safeTvdbSeriesId, cfg, cancellationToken).ConfigureAwait(false);
                 var seasonSummary = series?.Data?.Seasons?.FirstOrDefault(x => x.Number == info.ParentIndexNumber.Value);
                 if (seasonSummary != null)
                 {
@@ -580,7 +590,8 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
         var tmdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
         if (!string.IsNullOrWhiteSpace(tmdbId))
         {
-            var data = await _tmdb.GetPersonAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
+            var safeTmdbId = tmdbId;
+            var data = await _tmdb.GetPersonAsync(safeTmdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
                 var item = new Person
@@ -610,7 +621,8 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
 
             if (!string.IsNullOrWhiteSpace(tvdbId))
             {
-                var person = await _tvdb.GetPersonAsync(tvdbId, cfg, cancellationToken).ConfigureAwait(false);
+                var safeTvdbId = tvdbId;
+                var person = await _tvdb.GetPersonAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
                 if (person?.Data != null)
                 {
                     var item = new Person
@@ -640,7 +652,8 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
         var tmdbId = item.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
         if (!string.IsNullOrWhiteSpace(tmdbId))
         {
-            var data = await _tmdb.GetPersonAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
+            var safeTmdbId = tmdbId;
+            var data = await _tmdb.GetPersonAsync(safeTmdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
                 return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
@@ -651,7 +664,8 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
         var tvdbId = item.ProviderIds.TryGetValue("Tvdb", out var tvdbProviderId) ? tvdbProviderId : null;
         if (!string.IsNullOrWhiteSpace(tvdbId) && cfg.EnableTvdbFallback)
         {
-            var person = await _tvdb.GetPersonAsync(tvdbId, cfg, cancellationToken).ConfigureAwait(false);
+            var safeTvdbId = tvdbId;
+            var person = await _tvdb.GetPersonAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (person?.Data != null)
             {
                 return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
