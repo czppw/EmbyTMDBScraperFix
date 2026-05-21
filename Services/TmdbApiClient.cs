@@ -86,8 +86,17 @@ public sealed class TmdbApiClient
         if (!string.IsNullOrWhiteSpace(cfg.TmdbRegion)) query["region"] = cfg.TmdbRegion;
 
         var url = BaseUrl + path + "?" + BuildQuery(query);
-        using var stream = await _http.GetStreamAsync(new Uri(url), cfg, ct).ConfigureAwait(false);
-        return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, ct).ConfigureAwait(false);
+
+        try
+        {
+            using var stream = await _http.GetStreamAsync(new Uri(url), cfg, ct).ConfigureAwait(false);
+            return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"TMDB request failed: {url}", ex);
+            throw;
+        }
     }
 
     private static string BuildQuery(IDictionary<string, string> query)

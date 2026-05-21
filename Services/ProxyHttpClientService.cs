@@ -39,7 +39,7 @@ public sealed class ProxyHttpClientService
             try
             {
                 var uri = new Uri(target.Url);
-                using var client = CreateHttpClient(uri, cfg, TimeSpan.FromSeconds(10));
+                using var client = CreateHttpClient(uri, cfg, TimeSpan.FromSeconds(30));
                 using var request = new HttpRequestMessage(HttpMethod.Get, uri);
                 request.Headers.UserAgent.ParseAdd("EmbyTMDBScraperFix/1.0");
                 using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
@@ -75,7 +75,7 @@ public sealed class ProxyHttpClientService
         else if (apiItem?.Reachable != true)
         {
             result.Success = false;
-            result.Summary = "代理没有连通到 TMDB API 域名，当前代理不可用于 TMDB 刮削。";
+            result.Summary = "代理没有连通到 TMDB API 域名，当前代理不可用于 TMDB 刮削。若只是响应较慢，请留意现在测试超时已放宽到 30 秒。";
         }
         else if (string.IsNullOrWhiteSpace(cfg.TmdbApiKey))
         {
