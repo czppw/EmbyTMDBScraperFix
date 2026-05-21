@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -70,7 +71,7 @@ public sealed class ProxyHttpClientService
         else if (apiItem?.Reachable != true)
         {
             result.Success = false;
-            result.Summary = "代理没有连通到 TMDB API 域名，当前代理不可用于 TMDB 刮削。现在测试已放宽到 45 秒，并使用更兼容的请求方式。";
+            result.Summary = "代理没有连通到 TMDB API 域名，当前代理不可用于 TMDB 刮削。当前版本已在 HttpClient 失败时自动回退到 HttpWebRequest。";
         }
         else if (string.IsNullOrWhiteSpace(cfg.TmdbApiKey))
         {
@@ -98,25 +99,41 @@ public sealed class ProxyHttpClientService
 
     public async Task<Stream> GetStreamAsync(Uri uri, PluginConfiguration cfg, CancellationToken cancellationToken)
     {
-        using var response = await SendAsync(uri, cfg, TimeSpan.FromSeconds(45), HttpCompletionOption.ResponseContentRead, true, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-        return new MemoryStream(bytes, writable: false);
+        try
+        {
+            using var response = await SendAsync(uri, cfg, TimeSpan.FromSeconds(45), HttpCompletionOption.ResponseContentRead, true, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            return new MemoryStream(bytes, writable: false);
+        }
+        catch (Exception ex) when (ShouldFallbackToWebRequest(uri, cfg, ex))
+        {
+            _log.Warn($"HttpClient TMDB request failed, retrying with HttpWebRequest: {uri}. {ex.Message}");
+            return await GetStreamViaWebRequestAsync(uri, cfg, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task<HttpResponseInfo> GetResponseInfoAsync(string url, PluginConfiguration cfg, CancellationToken cancellationToken)
     {
         var uri = new Uri(url);
-        using var response = await SendAsync(uri, cfg, TimeSpan.FromSeconds(45), HttpCompletionOption.ResponseContentRead, false, cancellationToken).ConfigureAwait(false);
-        var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-        return new HttpResponseInfo
+        try
         {
-            Content = new MemoryStream(bytes, writable: false),
-            ContentType = response.Content.Headers.ContentType?.MediaType,
-            StatusCode = response.StatusCode,
-            ContentLength = bytes.Length,
-            ResponseUrl = url
-        };
+            using var response = await SendAsync(uri, cfg, TimeSpan.FromSeconds(45), HttpCompletionOption.ResponseContentRead, false, cancellationToken).ConfigureAwait(false);
+            var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            return new HttpResponseInfo
+            {
+                Content = new MemoryStream(bytes, writable: false),
+                ContentType = response.Content.Headers.ContentType?.MediaType,
+                StatusCode = response.StatusCode,
+                ContentLength = bytes.Length,
+                ResponseUrl = url
+            };
+        }
+        catch (Exception ex) when (ShouldFallbackToWebRequest(uri, cfg, ex))
+        {
+            _log.Warn($"HttpClient image/info request failed, retrying with HttpWebRequest: {uri}. {ex.Message}");
+            return await GetResponseInfoViaWebRequestAsync(uri, cfg, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task<HttpResponseMessage> SendAsync(Uri uri, PluginConfiguration cfg, TimeSpan timeout, HttpCompletionOption completionOption, bool expectsJson, CancellationToken cancellationToken)
@@ -145,6 +162,94 @@ public sealed class ProxyHttpClientService
         request.Headers.TryAddWithoutValidation("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
         request.Headers.ConnectionClose = true;
         return request;
+    }
+
+    private async Task<Stream> GetStreamViaWebRequestAsync(Uri uri, PluginConfiguration cfg, CancellationToken cancellationToken)
+    {
+#pragma warning disable SYSLIB0014
+        var request = (HttpWebRequest)WebRequest.Create(uri);
+#pragma warning restore SYSLIB0014
+        ConfigureWebRequest(request, uri, cfg, expectsJson: true);
+        using (cancellationToken.Register(() => request.Abort()))
+        using (var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false))
+        {
+            var stream = CreateResponseStream(response);
+            using (stream)
+            using (var memory = new MemoryStream())
+            {
+                await stream.CopyToAsync(memory).ConfigureAwait(false);
+                return new MemoryStream(memory.ToArray(), writable: false);
+            }
+        }
+    }
+
+    private async Task<HttpResponseInfo> GetResponseInfoViaWebRequestAsync(Uri uri, PluginConfiguration cfg, CancellationToken cancellationToken)
+    {
+#pragma warning disable SYSLIB0014
+        var request = (HttpWebRequest)WebRequest.Create(uri);
+#pragma warning restore SYSLIB0014
+        ConfigureWebRequest(request, uri, cfg, expectsJson: false);
+        using (cancellationToken.Register(() => request.Abort()))
+        using (var response = (HttpWebResponse)await request.GetResponseAsync().ConfigureAwait(false))
+        using (var stream = CreateResponseStream(response))
+        using (var memory = new MemoryStream())
+        {
+            await stream.CopyToAsync(memory).ConfigureAwait(false);
+            var bytes = memory.ToArray();
+            return new HttpResponseInfo
+            {
+                Content = new MemoryStream(bytes, writable: false),
+                ContentType = response.ContentType,
+                StatusCode = response.StatusCode,
+                ContentLength = bytes.Length,
+                ResponseUrl = uri.ToString()
+            };
+        }
+    }
+
+    private void ConfigureWebRequest(HttpWebRequest request, Uri uri, PluginConfiguration cfg, bool expectsJson)
+    {
+        request.Method = "GET";
+        request.ProtocolVersion = HttpVersion.Version11;
+        request.KeepAlive = false;
+        request.Timeout = 45000;
+        request.ReadWriteTimeout = 45000;
+        request.UserAgent = "Mozilla/5.0 (compatible; EmbyTMDBScraperFix/1.0; +https://github.com/czppw/EmbyTMDBScraperFix)";
+        request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+        request.Headers[HttpRequestHeader.AcceptLanguage] = "zh-CN,zh;q=0.9,en;q=0.8";
+        request.Accept = expectsJson ? "application/json, text/plain, */*" : "*/*";
+
+        if (_policy.ShouldProxy(uri, cfg))
+        {
+            request.Proxy = _policy.CreateProxy(cfg);
+            _log.Info($"TMDB request uses configured HTTP proxy via HttpWebRequest: {uri.Host}");
+        }
+        else
+        {
+            request.Proxy = null;
+        }
+    }
+
+    private static Stream CreateResponseStream(HttpWebResponse response)
+    {
+        var stream = response.GetResponseStream() ?? Stream.Null;
+        var encoding = response.ContentEncoding ?? string.Empty;
+        if (encoding.IndexOf("gzip", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return new GZipStream(stream, CompressionMode.Decompress);
+        }
+        if (encoding.IndexOf("deflate", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return new DeflateStream(stream, CompressionMode.Decompress);
+        }
+        return stream;
+    }
+
+    private bool ShouldFallbackToWebRequest(Uri uri, PluginConfiguration cfg, Exception ex)
+    {
+        if (!_policy.ShouldProxy(uri, cfg)) return false;
+        if (!string.Equals(uri.Host, "api.themoviedb.org", StringComparison.OrdinalIgnoreCase)) return false;
+        return ex is TaskCanceledException || ex is TimeoutException || ex is HttpRequestException || ex is IOException || ex is WebException;
     }
 
     private ProxyTestItem BuildSuccessItem(ProxyTestTarget target, Uri uri, PluginConfiguration cfg, HttpStatusCode statusCode)
