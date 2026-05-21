@@ -185,7 +185,19 @@ public sealed class ProxyHttpClientService
     }
 }
 
-internal sealed record ProxyTestTarget(string Name, string Url, bool RequiresApiKey);
+internal sealed class ProxyTestTarget
+{
+    public ProxyTestTarget(string name, string url, bool requiresApiKey)
+    {
+        Name = name;
+        Url = url;
+        RequiresApiKey = requiresApiKey;
+    }
+
+    public string Name { get; }
+    public string Url { get; }
+    public bool RequiresApiKey { get; }
+}
 
 public sealed class ProxyTestResult
 {
