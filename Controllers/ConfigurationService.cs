@@ -43,6 +43,13 @@ public sealed class UpdateFixConfiguration : IReturn<PluginConfiguration>
 [Route("/EmbyTMDBScraperFix/TestProxy", "POST", Summary = "Test proxy connectivity")]
 public sealed class TestFixProxy : IReturn<object>
 {
+    public bool ProxyEnabled { get; set; }
+    public string ProxyHost { get; set; } = string.Empty;
+    public int ProxyPort { get; set; }
+    public string ProxyUsername { get; set; } = string.Empty;
+    public string ProxyPassword { get; set; } = string.Empty;
+    public bool EnableLegacyGlobalProxyHook { get; set; }
+    public string TmdbApiKey { get; set; } = string.Empty;
 }
 
 [Route("/EmbyTMDBScraperFix/Logs", "GET", Summary = "Get recent plugin logs")]
@@ -127,6 +134,31 @@ public sealed class ConfigurationService : IService
 
     public async Task<object> Post(TestFixProxy request)
     {
-        return await PluginRuntime.Instance.ProxyClient.TestProxyAsync(PluginRuntime.Instance.Configuration, default).ConfigureAwait(false);
+        var current = PluginRuntime.Instance.Configuration;
+        var cfg = new PluginConfiguration
+        {
+            ProxyEnabled = request.ProxyEnabled,
+            ProxyHost = request.ProxyHost ?? string.Empty,
+            ProxyPort = request.ProxyPort,
+            ProxyUsername = request.ProxyUsername ?? string.Empty,
+            ProxyPassword = request.ProxyPassword ?? string.Empty,
+            EnableLegacyGlobalProxyHook = request.EnableLegacyGlobalProxyHook,
+            TmdbApiKey = request.TmdbApiKey ?? string.Empty,
+            TmdbLanguage = current.TmdbLanguage,
+            TmdbRegion = current.TmdbRegion,
+            EnableAdultMetadata = current.EnableAdultMetadata,
+            EnableTvdbFallback = current.EnableTvdbFallback,
+            TvdbApiKey = current.TvdbApiKey,
+            TvdbPin = current.TvdbPin,
+            TvdbLanguage = current.TvdbLanguage,
+            AutoScanEnabled = current.AutoScanEnabled,
+            ScanIntervalMinutes = current.ScanIntervalMinutes,
+            AutoMetadataRefresh = current.AutoMetadataRefresh,
+            MaxScrapeRetryCount = current.MaxScrapeRetryCount,
+            Libraries = current.Libraries,
+            MetadataProxyHosts = current.MetadataProxyHosts
+        };
+
+        return await PluginRuntime.Instance.ProxyClient.TestProxyAsync(cfg, default).ConfigureAwait(false);
     }
 }

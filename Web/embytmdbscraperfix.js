@@ -195,11 +195,25 @@ define(['loading', 'emby-input', 'emby-button', 'emby-checkbox'], function (load
         qs(view, '#btnTestProxy').addEventListener('click', function () {
             setStatus(view, '正在测试代理...');
             loading.show();
-            api('/EmbyTMDBScraperFix/TestProxy', 'POST', {}).then(function (result) {
+            api('/EmbyTMDBScraperFix/TestProxy', 'POST', getPayload(view)).then(function (result) {
+                var lines = [];
+                if (result && result.Summary) {
+                    lines.push(result.Summary);
+                    lines.push('');
+                }
+
                 var items = (result && result.Items) || [];
-                var lines = items.map(function (x) {
-                    return (x.Success ? '成功' : '失败') + '：' + (x.Url || '') + ' ' + (x.Message || '');
+                items.forEach(function (x) {
+                    lines.push(
+                        '[' + (x.Success ? '成功' : '失败') + '] ' +
+                        (x.Name || '未命名目标') +
+                        ' | 走代理: ' + (x.Proxied ? '是' : '否') +
+                        ' | 可达: ' + (x.Reachable ? '是' : '否') +
+                        ' | HTTP: ' + (x.StatusCode || 0) +
+                        ' | ' + (x.Message || '')
+                    );
                 });
+
                 setStatus(view, lines.join('\n') || '测试完成。', !result || result.Success === false);
                 loading.hide();
             }).catch(function (err) {
