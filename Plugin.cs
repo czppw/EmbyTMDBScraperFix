@@ -31,19 +31,13 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     {
         yield return new PluginPageInfo
         {
-            Name = "pluginjs",
-            EmbeddedResourcePath = "EmbyTMDBScraperFix.Web.plugin.js"
-        };
-
-        yield return new PluginPageInfo
-        {
-            Name = "embytmdbscraperfix.html",
+            Name = "EmbyTMDBScraperFixConfiguration",
             EmbeddedResourcePath = "EmbyTMDBScraperFix.Web.configuration.html"
         };
 
         yield return new PluginPageInfo
         {
-            Name = "embytmdbscraperfix.js",
+            Name = "EmbyTMDBScraperFixConfigurationjs",
             EmbeddedResourcePath = "EmbyTMDBScraperFix.Web.embytmdbscraperfix.js"
         };
     }

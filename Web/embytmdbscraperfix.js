@@ -162,6 +162,12 @@ define(['loading', 'emby-input', 'emby-button', 'emby-checkbox'], function (load
     }
 
     function bindEvents(view) {
+        if (view.__embyTmdbScraperFixBound) {
+            return;
+        }
+
+        view.__embyTmdbScraperFixBound = true;
+
         qs(view, '#EmbyTMDBScraperFixConfigForm').addEventListener('submit', function (e) {
             e.preventDefault();
             var payload = getPayload(view);
@@ -219,10 +225,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-checkbox'], function (load
     }
 
     return function (view) {
-        view.addEventListener('viewshow', function () {
-            loadPageData(view);
-        });
-
         bindEvents(view);
+        loadPageData(view);
     };
 });
