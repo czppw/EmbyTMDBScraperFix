@@ -1,16 +1,16 @@
-<div id="EmbyTMDBScraperFixConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
-    <div data-role="content">
-        <div class="content-primary">
+<div is="emby-scroller" data-controller="plugin/embytmdbscraperfix" class="view flex flex-direction-column scrollFrameY flex-grow" data-horizontal="false" data-forcescrollbar="true" data-centerfocus="true" data-bindheader="true" data-title="EmbyTMDBScraperFix">
+    <div class="scrollSlider flex-grow flex-direction-column padded-left padded-left-page padded-right padded-top-page padded-bottom-page">
+        <div class="readOnlyContent auto-center">
             <form id="EmbyTMDBScraperFixConfigForm">
                 <div class="verticalSection verticalSection-extrabottompadding">
                     <div class="sectionTitleContainer flex align-items-center">
-                        <h2 class="sectionTitle">EmbyTMDBScraperFix</h2>
+                        <h1 class="sectionTitle">EmbyTMDBScraperFix</h1>
                     </div>
                     <p class="fieldDescription">配置 TMDB / TheTVDB 刮削、HTTP 代理和自动增量扫描。</p>
                 </div>
 
                 <div class="verticalSection">
-                    <h3 class="checkboxListLabel">TMDB 设置</h3>
+                    <h2 class="sectionTitle">TMDB 设置</h2>
                     <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="tmdbApiKey">TMDB API Key</label>
                         <input id="tmdbApiKey" name="tmdbApiKey" type="password" autocomplete="off" />
@@ -31,7 +31,7 @@
                 </div>
 
                 <div class="verticalSection">
-                    <h3 class="checkboxListLabel">TheTVDB 备用源</h3>
+                    <h2 class="sectionTitle">TheTVDB 备用源</h2>
                     <label class="checkboxContainer">
                         <input id="enableTvdbFallback" name="enableTvdbFallback" type="checkbox" />
                         <span>启用 TheTVDB 作为剧集 / 分季 / 分集 / 人物备用来源</span>
@@ -52,7 +52,7 @@
                 </div>
 
                 <div class="verticalSection">
-                    <h3 class="checkboxListLabel">HTTP 代理</h3>
+                    <h2 class="sectionTitle">HTTP 代理</h2>
                     <label class="checkboxContainer">
                         <input id="proxyEnabled" name="proxyEnabled" type="checkbox" />
                         <span>启用 HTTP 代理</span>
@@ -84,7 +84,7 @@
                 </div>
 
                 <div class="verticalSection">
-                    <h3 class="checkboxListLabel">自动增量扫描</h3>
+                    <h2 class="sectionTitle">自动增量扫描</h2>
                     <label class="checkboxContainer">
                         <input id="autoScanEnabled" name="autoScanEnabled" type="checkbox" />
                         <span>启用自动增量扫描</span>
@@ -104,7 +104,7 @@
                 </div>
 
                 <div class="verticalSection">
-                    <h3 class="checkboxListLabel">媒体库</h3>
+                    <h2 class="sectionTitle">媒体库</h2>
                     <div class="fieldDescription">选择需要自动增量扫描的媒体库路径。</div>
                     <div id="libraryList"></div>
                 </div>
@@ -124,210 +124,4 @@
             </form>
         </div>
     </div>
-
-    <script type="text/javascript">
-        (function () {
-            var pluginId = 'b6b08b4b-1b7d-4f1a-9d6c-f1f6b1ef0a11';
-            var page = document.getElementById('EmbyTMDBScraperFixConfigPage');
-
-            function $(id) {
-                return page.querySelector('#' + id);
-            }
-
-            function setStatus(message, isError) {
-                var el = $('status');
-                el.style.color = isError ? '#c00' : '';
-                el.textContent = message || '';
-            }
-
-            function api(path, method, body) {
-                var options = {
-                    type: method || 'GET',
-                    url: path,
-                    dataType: 'json'
-                };
-
-                if (body !== undefined) {
-                    options.contentType = 'application/json';
-                    options.data = JSON.stringify(body);
-                }
-
-                return ApiClient.ajax(options);
-            }
-
-            function setBool(id, value) {
-                $(id).checked = !!value;
-            }
-
-            function getBool(id) {
-                return !!$(id).checked;
-            }
-
-            function intValue(id, fallback) {
-                var value = parseInt($(id).value, 10);
-                return isNaN(value) ? fallback : value;
-            }
-
-            function fillForm(cfg) {
-                cfg = cfg || {};
-                setBool('proxyEnabled', cfg.ProxyEnabled);
-                $('proxyHost').value = cfg.ProxyHost || '';
-                $('proxyPort').value = cfg.ProxyPort || 7890;
-                $('proxyUsername').value = cfg.ProxyUsername || '';
-                $('proxyPassword').value = cfg.ProxyPassword || '';
-                setBool('enableLegacyGlobalProxyHook', cfg.EnableLegacyGlobalProxyHook);
-                $('tmdbApiKey').value = cfg.TmdbApiKey || '';
-                $('tmdbLanguage').value = cfg.TmdbLanguage || 'zh-CN';
-                $('tmdbRegion').value = cfg.TmdbRegion || 'CN';
-                setBool('enableAdultMetadata', cfg.EnableAdultMetadata);
-                setBool('enableTvdbFallback', cfg.EnableTvdbFallback);
-                $('tvdbApiKey').value = cfg.TvdbApiKey || '';
-                $('tvdbPin').value = cfg.TvdbPin || '';
-                $('tvdbLanguage').value = cfg.TvdbLanguage || 'zho';
-                setBool('autoScanEnabled', cfg.AutoScanEnabled !== false);
-                setBool('autoMetadataRefresh', cfg.AutoMetadataRefresh !== false);
-                $('scanIntervalMinutes').value = cfg.ScanIntervalMinutes || 10;
-                $('maxScrapeRetryCount').value = cfg.MaxScrapeRetryCount || 3;
-            }
-
-            function renderLibraries(libraries) {
-                var list = $('libraryList');
-                list.innerHTML = '';
-
-                if (!libraries || !libraries.length) {
-                    list.innerHTML = '<div class="fieldDescription">未获取到媒体库。</div>';
-                    return;
-                }
-
-                libraries.forEach(function (lib, index) {
-                    var wrapper = document.createElement('div');
-                    wrapper.className = 'checkboxContainer';
-                    wrapper.innerHTML = '' +
-                        '<input type="checkbox" class="lib-enabled" data-index="' + index + '" ' + (lib.Enabled !== false ? 'checked' : '') + ' />' +
-                        '<div class="checkboxText">' +
-                        '<div><strong>' + (lib.Name || '未命名媒体库') + '</strong></div>' +
-                        '<div class="fieldDescription">' + (lib.Path || lib.Id || '') + '</div>' +
-                        '</div>';
-                    list.appendChild(wrapper);
-                });
-            }
-
-            function collectLibraries(existing) {
-                var result = (existing || []).map(function (x) {
-                    return {
-                        Id: x.Id || '',
-                        Name: x.Name || '',
-                        Path: x.Path || '',
-                        Enabled: x.Enabled !== false
-                    };
-                });
-
-                var checks = page.querySelectorAll('.lib-enabled');
-                for (var i = 0; i < checks.length; i++) {
-                    var idx = parseInt(checks[i].getAttribute('data-index'), 10);
-                    if (!isNaN(idx) && result[idx]) {
-                        result[idx].Enabled = checks[i].checked;
-                    }
-                }
-
-                return result;
-            }
-
-            function getPayload() {
-                var config = page.__currentConfig || {};
-                var libraries = collectLibraries(page.__libraries || config.Libraries || []);
-
-                return {
-                    ProxyEnabled: getBool('proxyEnabled'),
-                    ProxyHost: $('proxyHost').value.trim(),
-                    ProxyPort: intValue('proxyPort', 7890),
-                    ProxyUsername: $('proxyUsername').value || '',
-                    ProxyPassword: $('proxyPassword').value || '',
-                    EnableLegacyGlobalProxyHook: getBool('enableLegacyGlobalProxyHook'),
-                    TmdbApiKey: $('tmdbApiKey').value.trim(),
-                    TmdbLanguage: $('tmdbLanguage').value.trim() || 'zh-CN',
-                    TmdbRegion: $('tmdbRegion').value.trim() || 'CN',
-                    EnableAdultMetadata: getBool('enableAdultMetadata'),
-                    EnableTvdbFallback: getBool('enableTvdbFallback'),
-                    TvdbApiKey: $('tvdbApiKey').value.trim(),
-                    TvdbPin: $('tvdbPin').value.trim(),
-                    TvdbLanguage: $('tvdbLanguage').value.trim() || 'zho',
-                    AutoScanEnabled: getBool('autoScanEnabled'),
-                    ScanIntervalMinutes: intValue('scanIntervalMinutes', 10),
-                    AutoMetadataRefresh: getBool('autoMetadataRefresh'),
-                    MaxScrapeRetryCount: intValue('maxScrapeRetryCount', 3),
-                    Libraries: libraries
-                };
-            }
-
-            function loadLibraries() {
-                return api('/EmbyTMDBScraperFix/Libraries', 'GET').then(function (libs) {
-                    page.__libraries = libs || [];
-                    renderLibraries(page.__libraries);
-                });
-            }
-
-            function loadPageData() {
-                setStatus('正在加载配置...');
-                return ApiClient.getPluginConfiguration(pluginId).then(function (config) {
-                    page.__currentConfig = config || {};
-                    fillForm(page.__currentConfig);
-                    return loadLibraries();
-                }).then(function () {
-                    setStatus('配置已加载。');
-                }).catch(function (err) {
-                    setStatus('加载失败：' + (err && err.message ? err.message : err), true);
-                });
-            }
-
-            page.addEventListener('viewshow', function () {
-                loadPageData();
-            });
-
-            $('EmbyTMDBScraperFixConfigForm').addEventListener('submit', function (e) {
-                e.preventDefault();
-                var payload = getPayload();
-                setStatus('正在保存配置...');
-                ApiClient.updatePluginConfiguration(pluginId, payload).then(function () {
-                    return ApiClient.getPluginConfiguration(pluginId);
-                }).then(function (config) {
-                    page.__currentConfig = config || payload;
-                    fillForm(page.__currentConfig);
-                    Dashboard.processPluginConfigurationUpdateResult();
-                    setStatus('配置已保存。');
-                }).catch(function (err) {
-                    setStatus('保存失败：' + (err && err.message ? err.message : err), true);
-                });
-            });
-
-            $('btnReload').addEventListener('click', function () {
-                loadPageData();
-            });
-
-            $('btnTestProxy').addEventListener('click', function () {
-                setStatus('正在测试代理...');
-                api('/EmbyTMDBScraperFix/TestProxy', 'POST', {}).then(function (result) {
-                    var items = (result && result.Items) || [];
-                    var lines = items.map(function (x) {
-                        return (x.Success ? '成功' : '失败') + '：' + (x.Url || '') + ' ' + (x.Message || '');
-                    });
-                    setStatus(lines.join('\n') || '测试完成。', !result || result.Success === false);
-                }).catch(function (err) {
-                    setStatus('测试失败：' + (err && err.message ? err.message : err), true);
-                });
-            });
-
-            $('btnLogs').addEventListener('click', function () {
-                setStatus('正在读取日志...');
-                api('/EmbyTMDBScraperFix/Logs?Limit=20', 'GET').then(function (logs) {
-                    var lines = (logs || []).map(function (x) {
-                        return (x.Time || '') + ' [' + (x.Level || '') + '] ' + (x.Message || '');
-                    });
-                    setStatus(lines.join('\n') || '暂无日志。');
-                }).catch(function (err) {
-                    setStatus('日志读取失败：' + (err && err.message ? err.message : err), true);
-                });
-            });
-        })();
-    </script>
 </div>
