@@ -78,7 +78,8 @@ public sealed class TvdbApiClient
     public string NormalizeImageUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return string.Empty;
-        return url.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? url : "https://artworks.thetvdb.com" + url;
+        var safeUrl = url!;
+        return safeUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? safeUrl : "https://artworks.thetvdb.com" + safeUrl;
     }
 
     private async Task<string?> EnsureTokenAsync(PluginConfiguration cfg, CancellationToken ct)
