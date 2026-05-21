@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbyTMDBScraperFix.Configuration;
@@ -26,30 +27,24 @@ public sealed class ProxyHttpClientService
         var result = new ProxyTestResult();
         var targets = new List<ProxyTestTarget>
         {
-            new("TMDB 图片域名", "https://image.tmdb.org/t/p/w92/wwemzKWzjKYJFfCeiB57q3r4Bcm.png", requiresApiKey: false)
+            new ProxyTestTarget("TMDB 图片域名", "https://image.tmdb.org/t/p/w92/wwemzKWzjKYJFfCeiB57q3r4Bcm.png", false, false)
         };
 
         var tmdbApiUrl = string.IsNullOrWhiteSpace(cfg.TmdbApiKey)
             ? "https://api.themoviedb.org/3/configuration"
             : "https://api.themoviedb.org/3/configuration?api_key=" + Uri.EscapeDataString(cfg.TmdbApiKey);
-        targets.Add(new ProxyTestTarget("TMDB API", tmdbApiUrl, requiresApiKey: true));
+        targets.Add(new ProxyTestTarget("TMDB API", tmdbApiUrl, true, true));
 
         foreach (var target in targets)
         {
+            var uri = new Uri(target.Url);
             try
             {
-                var uri = new Uri(target.Url);
-                using var client = CreateHttpClient(uri, cfg, TimeSpan.FromSeconds(30));
-                using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-                request.Headers.UserAgent.ParseAdd("EmbyTMDBScraperFix/1.0");
-                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-
-                var item = BuildSuccessItem(target, uri, cfg, response.StatusCode);
-                result.Items.Add(item);
+                using var response = await SendAsync(uri, cfg, TimeSpan.FromSeconds(45), HttpCompletionOption.ResponseHeadersRead, target.ExpectsJson, cancellationToken).ConfigureAwait(false);
+                result.Items.Add(BuildSuccessItem(target, uri, cfg, response.StatusCode));
             }
             catch (Exception ex)
             {
-                var uri = new Uri(target.Url);
                 result.Items.Add(new ProxyTestItem
                 {
                     Name = target.Name,
@@ -75,7 +70,7 @@ public sealed class ProxyHttpClientService
         else if (apiItem?.Reachable != true)
         {
             result.Success = false;
-            result.Summary = "代理没有连通到 TMDB API 域名，当前代理不可用于 TMDB 刮削。若只是响应较慢，请留意现在测试超时已放宽到 30 秒。";
+            result.Summary = "代理没有连通到 TMDB API 域名，当前代理不可用于 TMDB 刮削。现在测试已放宽到 45 秒，并使用更兼容的请求方式。";
         }
         else if (string.IsNullOrWhiteSpace(cfg.TmdbApiKey))
         {
@@ -103,16 +98,16 @@ public sealed class ProxyHttpClientService
 
     public async Task<Stream> GetStreamAsync(Uri uri, PluginConfiguration cfg, CancellationToken cancellationToken)
     {
-        using var client = CreateHttpClient(uri, cfg, TimeSpan.FromSeconds(30));
-        var bytes = await client.GetByteArrayAsync(uri).ConfigureAwait(false);
+        using var response = await SendAsync(uri, cfg, TimeSpan.FromSeconds(45), HttpCompletionOption.ResponseContentRead, true, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         return new MemoryStream(bytes, writable: false);
     }
 
     public async Task<HttpResponseInfo> GetResponseInfoAsync(string url, PluginConfiguration cfg, CancellationToken cancellationToken)
     {
         var uri = new Uri(url);
-        using var client = CreateHttpClient(uri, cfg, TimeSpan.FromSeconds(30));
-        using var response = await client.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+        using var response = await SendAsync(uri, cfg, TimeSpan.FromSeconds(45), HttpCompletionOption.ResponseContentRead, false, cancellationToken).ConfigureAwait(false);
         var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
         return new HttpResponseInfo
         {
@@ -122,6 +117,34 @@ public sealed class ProxyHttpClientService
             ContentLength = bytes.Length,
             ResponseUrl = url
         };
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(Uri uri, PluginConfiguration cfg, TimeSpan timeout, HttpCompletionOption completionOption, bool expectsJson, CancellationToken cancellationToken)
+    {
+        using var client = CreateHttpClient(uri, cfg, timeout);
+        using var request = CreateRequest(uri, expectsJson);
+        return await client.SendAsync(request, completionOption, cancellationToken).ConfigureAwait(false);
+    }
+
+    private HttpRequestMessage CreateRequest(Uri uri, bool expectsJson)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Version = HttpVersion.Version11;
+        request.Headers.UserAgent.Clear();
+        request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (compatible; EmbyTMDBScraperFix/1.0; +https://github.com/czppw/EmbyTMDBScraperFix)");
+        request.Headers.Accept.Clear();
+        if (expectsJson)
+        {
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.TryAddWithoutValidation("Accept", "application/json, text/plain, */*");
+        }
+        else
+        {
+            request.Headers.TryAddWithoutValidation("Accept", "*/*");
+        }
+        request.Headers.TryAddWithoutValidation("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
+        request.Headers.ConnectionClose = true;
+        return request;
     }
 
     private ProxyTestItem BuildSuccessItem(ProxyTestTarget target, Uri uri, PluginConfiguration cfg, HttpStatusCode statusCode)
@@ -170,7 +193,12 @@ public sealed class ProxyHttpClientService
 
     private HttpClient CreateHttpClient(Uri uri, PluginConfiguration cfg, TimeSpan timeout)
     {
-        var handler = new HttpClientHandler();
+        var handler = new HttpClientHandler
+        {
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            UseCookies = false
+        };
+
         if (_policy.ShouldProxy(uri, cfg))
         {
             handler.UseProxy = true;
@@ -181,22 +209,25 @@ public sealed class ProxyHttpClientService
         {
             handler.UseProxy = false;
         }
+
         return new HttpClient(handler, disposeHandler: true) { Timeout = timeout };
     }
 }
 
 internal sealed class ProxyTestTarget
 {
-    public ProxyTestTarget(string name, string url, bool requiresApiKey)
+    public ProxyTestTarget(string name, string url, bool requiresApiKey, bool expectsJson)
     {
         Name = name;
         Url = url;
         RequiresApiKey = requiresApiKey;
+        ExpectsJson = expectsJson;
     }
 
     public string Name { get; }
     public string Url { get; }
     public bool RequiresApiKey { get; }
+    public bool ExpectsJson { get; }
 }
 
 public sealed class ProxyTestResult

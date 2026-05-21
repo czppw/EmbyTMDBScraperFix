@@ -94,7 +94,7 @@ public sealed class TmdbApiClient
         }
         catch (Exception ex)
         {
-            _log.Error($"TMDB request failed: {url}", ex);
+            _log.Error($"TMDB request failed: {url}. ProxyEnabled={cfg.ProxyEnabled}, ProxyHost={cfg.ProxyHost}, ProxyPort={cfg.ProxyPort}", ex);
             throw;
         }
     }
