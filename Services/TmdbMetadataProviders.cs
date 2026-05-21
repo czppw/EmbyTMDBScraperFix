@@ -87,15 +87,14 @@ public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<Movie, M
         var result = new MetadataResult<Movie>();
         var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
         var tmdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
-        TmdbTitle? data = !string.IsNullOrWhiteSpace(tmdbId)
-            ? await _tmdb.GetMovieAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false)
-            : null;
+        if (string.IsNullOrWhiteSpace(tmdbId)) return result;
+        TmdbTitle? data = await _tmdb.GetMovieAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
 
         if (data == null)
         {
             var search = await GetSearchResults(info, cancellationToken).ConfigureAwait(false);
             var match = search.FirstOrDefault();
-            if (match == null || !match.ProviderIds.TryGetValue("Tmdb", out tmdbId)) return result;
+            if (match == null || !match.ProviderIds.TryGetValue("Tmdb", out tmdbId) || string.IsNullOrWhiteSpace(tmdbId)) return result;
             data = await _tmdb.GetMovieAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
         }
 
@@ -168,15 +167,14 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
         var result = new MetadataResult<Series>();
         var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
         var tmdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
-        TmdbTitle? data = !string.IsNullOrWhiteSpace(tmdbId)
-            ? await _tmdb.GetSeriesAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false)
-            : null;
+        if (string.IsNullOrWhiteSpace(tmdbId)) return result;
+        TmdbTitle? data = await _tmdb.GetSeriesAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
 
         if (data == null)
         {
             var search = await GetSearchResults(info, cancellationToken).ConfigureAwait(false);
             var match = search.FirstOrDefault();
-            if (match == null || !match.ProviderIds.TryGetValue("Tmdb", out tmdbId)) return result;
+            if (match == null || !match.ProviderIds.TryGetValue("Tmdb", out tmdbId) || string.IsNullOrWhiteSpace(tmdbId)) return result;
             data = await _tmdb.GetSeriesAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
         }
 
@@ -244,7 +242,8 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
         if (info.SeriesProviderIds != null) info.SeriesProviderIds.TryGetValue("Tmdb", out seriesTmdbId);
         if (string.IsNullOrWhiteSpace(seriesTmdbId)) return result;
 
-        var data = await _tmdb.GetEpisodeAsync(seriesTmdbId, info.ParentIndexNumber.Value, info.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
+        var safeSeriesTmdbId = seriesTmdbId;
+        var data = await _tmdb.GetEpisodeAsync(safeSeriesTmdbId, info.ParentIndexNumber.Value, info.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
         if (data == null) return result;
 
         var item = new Episode
