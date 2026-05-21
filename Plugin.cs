@@ -1,12 +1,13 @@
 using System;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
+using MediaBrowser.Model.Plugins;
 using MediaBrowser.Model.Serialization;
 using EmbyTMDBScraperFix.Configuration;
 
 namespace EmbyTMDBScraperFix;
 
-public sealed class Plugin : BasePlugin<PluginConfiguration>
+public sealed class Plugin : BasePlugin<PluginConfiguration>, IPluginConfigurationPage
 {
     public static readonly Guid PluginId = new("b6b08b4b-1b7d-4f1a-9d6c-f1f6b1ef0a11");
     public const string PluginDisplayName = "EmbyTMDBScraperFix";
@@ -24,4 +25,13 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>
     public override string Name => PluginDisplayName;
 
     public override string Description => "HTTP proxy-aware TMDB/TVDB scraper provider with incremental auto-scan for Emby.";
+
+    public PluginPageInfo ConfigurationPage => new()
+    {
+        Name = PluginDisplayName,
+        DisplayName = PluginDisplayName,
+        MenuIcon = "tv",
+        MenuSection = "Server",
+        EmbeddedResourcePath = GetType().Namespace + ".Web.configuration.html"
+    };
 }
