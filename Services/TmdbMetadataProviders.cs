@@ -201,7 +201,10 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
         if (results.Count == 0 && cfg.EnableTvdbFallback && !string.IsNullOrWhiteSpace(cfg.TvdbApiKey))
         {
             var tvdbSearch = await _tvdb.SearchSeriesAsync(info.Name, cfg, cancellationToken).ConfigureAwait(false);
-            results.AddRange(tvdbSearch?.Data?.Select(x => MetadataProviderFactory.ToTvdbRemoteSearchResult(x, Name, _tvdb.NormalizeImageUrl(x.ImageUrl))) ?? Enumerable.Empty<RemoteSearchResult>());
+            if (tvdbSearch?.Data != null)
+            {
+                results.AddRange(tvdbSearch.Data.Select(x => MetadataProviderFactory.ToTvdbRemoteSearchResult(x, Name, _tvdb.NormalizeImageUrl(x.ImageUrl))));
+            }
         }
 
         return results;
@@ -559,7 +562,10 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
         if (results.Count == 0 && cfg.EnableTvdbFallback && !string.IsNullOrWhiteSpace(cfg.TvdbApiKey))
         {
             var tvdbSearch = await _tvdb.SearchPersonAsync(info.Name, cfg, cancellationToken).ConfigureAwait(false);
-            results.AddRange(tvdbSearch?.Data?.Select(x => MetadataProviderFactory.ToTvdbRemoteSearchResult(x, Name, _tvdb.NormalizeImageUrl(x.ImageUrl))) ?? Enumerable.Empty<RemoteSearchResult>());
+            if (tvdbSearch?.Data != null)
+            {
+                results.AddRange(tvdbSearch.Data.Select(x => MetadataProviderFactory.ToTvdbRemoteSearchResult(x, Name, _tvdb.NormalizeImageUrl(x.ImageUrl))));
+            }
         }
 
         return results;
@@ -596,7 +602,8 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
             if (string.IsNullOrWhiteSpace(tvdbId))
             {
                 var search = await _tvdb.SearchPersonAsync(info.Name ?? string.Empty, cfg, cancellationToken).ConfigureAwait(false);
-                tvdbId = search?.Data?.FirstOrDefault()?.TvdbId ?? search?.Data?.FirstOrDefault()?.Id;
+                var first = search?.Data?.FirstOrDefault();
+                tvdbId = first?.TvdbId ?? first?.Id;
             }
 
             if (!string.IsNullOrWhiteSpace(tvdbId))
