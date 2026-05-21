@@ -146,8 +146,31 @@ public sealed class IncrementalScanService
         }
     }
 
-    private sealed record FileSnapshot(string Path, long Length, DateTime LastWriteUtc);
-    private sealed record LibraryRoot(string Name, string Path);
+    private sealed class FileSnapshot
+    {
+        public string Path { get; }
+        public long Length { get; }
+        public DateTime LastWriteUtc { get; }
+
+        public FileSnapshot(string path, long length, DateTime lastWriteUtc)
+        {
+            Path = path;
+            Length = length;
+            LastWriteUtc = lastWriteUtc;
+        }
+    }
+
+    private sealed class LibraryRoot
+    {
+        public string Name { get; }
+        public string Path { get; }
+
+        public LibraryRoot(string name, string path)
+        {
+            Name = name;
+            Path = path;
+        }
+    }
 }
 
 public sealed class IncrementalScanResult

@@ -59,7 +59,7 @@ internal static class TmdbProviderFactory
     public static DateTimeOffset? ParseDate(string? date) => DateTimeOffset.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dt) ? dt : null;
 }
 
-public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<MovieInfo, Movie>, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
+public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<Movie, MovieInfo>, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
 {
     private readonly TmdbApiClient _tmdb;
 
@@ -140,7 +140,7 @@ public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<MovieInf
     }
 }
 
-public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<SeriesInfo, Series>, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
+public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series, SeriesInfo>, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
 {
     private readonly TmdbApiClient _tmdb;
 
@@ -216,7 +216,7 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<SeriesI
     public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken) => TmdbProviderFactory.GetImageResponseAsync(url, cancellationToken);
 }
 
-public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<EpisodeInfo, Episode>, IHasOrder, IHasSupportedExternalIdentifiers
+public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episode, EpisodeInfo>, IHasOrder, IHasSupportedExternalIdentifiers
 {
     private readonly TmdbApiClient _tmdb;
 
