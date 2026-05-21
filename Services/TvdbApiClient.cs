@@ -31,48 +31,42 @@ public sealed class TvdbApiClient
     {
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
-        var safeToken = token;
-        return await GetJsonAsync<TvdbSearchResponse>($"/search?query={Uri.EscapeDataString(name)}&type=series", cfg, safeToken, ct).ConfigureAwait(false);
+        return await GetJsonAsync<TvdbSearchResponse>($"/search?query={Uri.EscapeDataString(name)}&type=series", cfg, token, ct).ConfigureAwait(false);
     }
 
     public async Task<TvdbSearchResponse?> SearchPersonAsync(string name, PluginConfiguration cfg, CancellationToken ct)
     {
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
-        var safeToken = token;
-        return await GetJsonAsync<TvdbSearchResponse>($"/search?query={Uri.EscapeDataString(name)}&type=people", cfg, safeToken, ct).ConfigureAwait(false);
+        return await GetJsonAsync<TvdbSearchResponse>($"/search?query={Uri.EscapeDataString(name)}&type=people", cfg, token, ct).ConfigureAwait(false);
     }
 
     public async Task<TvdbSeriesResponse?> GetSeriesAsync(string id, PluginConfiguration cfg, CancellationToken ct)
     {
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
-        var safeToken = token;
-        return await GetJsonAsync<TvdbSeriesResponse>($"/series/{id}/extended", cfg, safeToken, ct).ConfigureAwait(false);
+        return await GetJsonAsync<TvdbSeriesResponse>($"/series/{id}/extended", cfg, token, ct).ConfigureAwait(false);
     }
 
     public async Task<TvdbSeasonResponse?> GetSeasonAsync(string id, PluginConfiguration cfg, CancellationToken ct)
     {
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
-        var safeToken = token;
-        return await GetJsonAsync<TvdbSeasonResponse>($"/seasons/{id}/extended", cfg, safeToken, ct).ConfigureAwait(false);
+        return await GetJsonAsync<TvdbSeasonResponse>($"/seasons/{id}/extended", cfg, token, ct).ConfigureAwait(false);
     }
 
     public async Task<TvdbEpisodeResponse?> GetEpisodeAsync(string id, PluginConfiguration cfg, CancellationToken ct)
     {
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
-        var safeToken = token;
-        return await GetJsonAsync<TvdbEpisodeResponse>($"/episodes/{id}/extended", cfg, safeToken, ct).ConfigureAwait(false);
+        return await GetJsonAsync<TvdbEpisodeResponse>($"/episodes/{id}/extended", cfg, token, ct).ConfigureAwait(false);
     }
 
     public async Task<TvdbPersonResponse?> GetPersonAsync(string id, PluginConfiguration cfg, CancellationToken ct)
     {
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
-        var safeToken = token;
-        return await GetJsonAsync<TvdbPersonResponse>($"/people/{id}/extended", cfg, safeToken, ct).ConfigureAwait(false);
+        return await GetJsonAsync<TvdbPersonResponse>($"/people/{id}/extended", cfg, token, ct).ConfigureAwait(false);
     }
 
     public string NormalizeImageUrl(string? url)
@@ -135,6 +129,11 @@ public sealed class TvdbApiClient
             return default;
         }
         using var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        if (stream == null)
+        {
+            return default;
+        }
+
         return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, ct).ConfigureAwait(false);
     }
 

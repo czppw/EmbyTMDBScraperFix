@@ -243,8 +243,9 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
             var tvdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tvdb", out var tvdbProviderId) ? tvdbProviderId : null;
             if (string.IsNullOrWhiteSpace(tvdbId))
             {
-                var search = await _tvdb.SearchSeriesAsync(info.Name ?? string.Empty, cfg, cancellationToken).ConfigureAwait(false);
-                tvdbId = search?.Data?.FirstOrDefault()?.TvdbId ?? search?.Data?.FirstOrDefault()?.Id;
+            var search = await _tvdb.SearchSeriesAsync(info.Name ?? string.Empty, cfg, cancellationToken).ConfigureAwait(false);
+            var first = search?.Data?.FirstOrDefault();
+            tvdbId = first?.TvdbId ?? first?.Id;
             }
 
             if (!string.IsNullOrWhiteSpace(tvdbId))
@@ -370,7 +371,8 @@ public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season,
             if (string.IsNullOrWhiteSpace(tvdbSeriesId) && !string.IsNullOrWhiteSpace(info.SeriesName))
             {
                 var search = await _tvdb.SearchSeriesAsync(info.SeriesName, cfg, cancellationToken).ConfigureAwait(false);
-                tvdbSeriesId = search?.Data?.FirstOrDefault()?.TvdbId ?? search?.Data?.FirstOrDefault()?.Id;
+                var first = search?.Data?.FirstOrDefault();
+                tvdbSeriesId = first?.TvdbId ?? first?.Id;
             }
 
             if (!string.IsNullOrWhiteSpace(tvdbSeriesId))
