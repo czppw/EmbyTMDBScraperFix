@@ -22,10 +22,17 @@ public sealed class UpdateFixConfiguration : IReturn<PluginConfiguration>
     public string ProxyUsername { get; set; } = string.Empty;
     public string ProxyPassword { get; set; } = string.Empty;
     public bool EnableLegacyGlobalProxyHook { get; set; }
+
     public string TmdbApiKey { get; set; } = string.Empty;
     public string TmdbLanguage { get; set; } = "zh-CN";
     public string TmdbRegion { get; set; } = "CN";
     public bool EnableAdultMetadata { get; set; }
+
+    public bool EnableTvdbFallback { get; set; }
+    public string TvdbApiKey { get; set; } = string.Empty;
+    public string TvdbPin { get; set; } = string.Empty;
+    public string TvdbLanguage { get; set; } = "zho";
+
     public bool AutoScanEnabled { get; set; }
     public int ScanIntervalMinutes { get; set; }
     public bool AutoMetadataRefresh { get; set; } = true;
@@ -97,10 +104,17 @@ public sealed class ConfigurationService : IService
         cfg.ProxyUsername = request.ProxyUsername ?? string.Empty;
         cfg.ProxyPassword = request.ProxyPassword ?? string.Empty;
         cfg.EnableLegacyGlobalProxyHook = request.EnableLegacyGlobalProxyHook;
+
         cfg.TmdbApiKey = request.TmdbApiKey ?? string.Empty;
         cfg.TmdbLanguage = string.IsNullOrWhiteSpace(request.TmdbLanguage) ? "zh-CN" : request.TmdbLanguage;
         cfg.TmdbRegion = string.IsNullOrWhiteSpace(request.TmdbRegion) ? "CN" : request.TmdbRegion;
         cfg.EnableAdultMetadata = request.EnableAdultMetadata;
+
+        cfg.EnableTvdbFallback = request.EnableTvdbFallback;
+        cfg.TvdbApiKey = request.TvdbApiKey ?? string.Empty;
+        cfg.TvdbPin = request.TvdbPin ?? string.Empty;
+        cfg.TvdbLanguage = string.IsNullOrWhiteSpace(request.TvdbLanguage) ? "zho" : request.TvdbLanguage;
+
         cfg.AutoScanEnabled = request.AutoScanEnabled;
         cfg.ScanIntervalMinutes = Math.Max(1, request.ScanIntervalMinutes);
         cfg.AutoMetadataRefresh = request.AutoMetadataRefresh;

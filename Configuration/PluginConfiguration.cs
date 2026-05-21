@@ -11,10 +11,17 @@ public class PluginConfiguration : BasePluginConfiguration
     public string ProxyUsername { get; set; } = string.Empty;
     public string ProxyPassword { get; set; } = string.Empty;
     public bool EnableLegacyGlobalProxyHook { get; set; } = false;
+
     public string TmdbApiKey { get; set; } = string.Empty;
     public string TmdbLanguage { get; set; } = "zh-CN";
     public string TmdbRegion { get; set; } = "CN";
     public bool EnableAdultMetadata { get; set; } = false;
+
+    public bool EnableTvdbFallback { get; set; } = false;
+    public string TvdbApiKey { get; set; } = string.Empty;
+    public string TvdbPin { get; set; } = string.Empty;
+    public string TvdbLanguage { get; set; } = "zho";
+
     public bool AutoScanEnabled { get; set; } = true;
     public int ScanIntervalMinutes { get; set; } = 10;
     public bool AutoMetadataRefresh { get; set; } = true;
@@ -26,7 +33,11 @@ public class PluginConfiguration : BasePluginConfiguration
         "api.themoviedb.org",
         "api.tmdb.org",
         "image.tmdb.org",
-        "www.themoviedb.org"
+        "www.themoviedb.org",
+        "api4.thetvdb.com",
+        "artworks.thetvdb.com",
+        "www.thetvdb.com",
+        "thetvdb.com"
     };
 }
 

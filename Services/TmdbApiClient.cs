@@ -45,14 +45,30 @@ public sealed class TmdbApiClient
         return GetJsonAsync<TmdbSearchResponse>("/search/tv", query, cfg, ct);
     }
 
+    public Task<TmdbSearchResponse?> SearchPersonAsync(string name, PluginConfiguration cfg, CancellationToken ct)
+    {
+        var query = new Dictionary<string, string>
+        {
+            ["query"] = name,
+            ["include_adult"] = cfg.EnableAdultMetadata ? "true" : "false"
+        };
+        return GetJsonAsync<TmdbSearchResponse>("/search/person", query, cfg, ct);
+    }
+
     public Task<TmdbTitle?> GetMovieAsync(string id, PluginConfiguration cfg, CancellationToken ct)
         => GetJsonAsync<TmdbTitle>($"/movie/{id}", new Dictionary<string, string> { ["append_to_response"] = "credits,images" }, cfg, ct);
 
     public Task<TmdbTitle?> GetSeriesAsync(string id, PluginConfiguration cfg, CancellationToken ct)
         => GetJsonAsync<TmdbTitle>($"/tv/{id}", new Dictionary<string, string> { ["append_to_response"] = "credits,images" }, cfg, ct);
 
+    public Task<TmdbTitle?> GetSeasonAsync(string seriesId, int seasonNumber, PluginConfiguration cfg, CancellationToken ct)
+        => GetJsonAsync<TmdbTitle>($"/tv/{seriesId}/season/{seasonNumber}", new Dictionary<string, string>(), cfg, ct);
+
     public Task<TmdbTitle?> GetEpisodeAsync(string seriesId, int season, int episode, PluginConfiguration cfg, CancellationToken ct)
         => GetJsonAsync<TmdbTitle>($"/tv/{seriesId}/season/{season}/episode/{episode}", new Dictionary<string, string>(), cfg, ct);
+
+    public Task<TmdbPerson?> GetPersonAsync(string id, PluginConfiguration cfg, CancellationToken ct)
+        => GetJsonAsync<TmdbPerson>($"/person/{id}", new Dictionary<string, string>(), cfg, ct);
 
     public string GetImageUrl(string? path, string size = "original")
         => string.IsNullOrWhiteSpace(path) ? string.Empty : $"https://image.tmdb.org/t/p/{size}{path}";
@@ -128,6 +144,9 @@ public sealed class TmdbSearchItem
     [JsonPropertyName("backdrop_path")]
     public string? Backdrop_Path { get; set; }
 
+    [JsonPropertyName("profile_path")]
+    public string? Profile_Path { get; set; }
+
     [JsonPropertyName("vote_average")]
     public double Vote_Average { get; set; }
 }
@@ -178,6 +197,24 @@ public sealed class TmdbTitle
 
     [JsonPropertyName("credits")]
     public TmdbCredits? Credits { get; set; }
+}
+
+public sealed class TmdbPerson
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("biography")]
+    public string? Biography { get; set; }
+
+    [JsonPropertyName("birthday")]
+    public string? Birthday { get; set; }
+
+    [JsonPropertyName("profile_path")]
+    public string? Profile_Path { get; set; }
 }
 
 public sealed class TmdbGenre
