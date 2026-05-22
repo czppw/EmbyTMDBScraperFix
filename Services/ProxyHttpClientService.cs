@@ -31,9 +31,11 @@ public sealed class ProxyHttpClientService
             new ProxyTestTarget("TMDB 图片域名", "https://image.tmdb.org/t/p/w92/wwemzKWzjKYJFfCeiB57q3r4Bcm.png", false, false)
         };
 
+        var tmdbApiBaseUrl = TmdbUrlHelper.ResolveApiBaseUrl(cfg.TmdbApiBaseUrl);
+        var tmdbConfigurationUrl = tmdbApiBaseUrl + "/configuration";
         var tmdbApiUrl = string.IsNullOrWhiteSpace(cfg.TmdbApiKey)
-            ? "https://api.themoviedb.org/3/configuration"
-            : "https://api.themoviedb.org/3/configuration?api_key=" + Uri.EscapeDataString(cfg.TmdbApiKey);
+            ? tmdbConfigurationUrl
+            : tmdbConfigurationUrl + "?api_key=" + Uri.EscapeDataString(cfg.TmdbApiKey);
         targets.Add(new ProxyTestTarget("TMDB API", tmdbApiUrl, true, true));
 
         foreach (var target in targets)
@@ -248,7 +250,7 @@ public sealed class ProxyHttpClientService
     private bool ShouldFallbackToWebRequest(Uri uri, PluginConfiguration cfg, Exception ex)
     {
         if (!_policy.ShouldProxy(uri, cfg)) return false;
-        if (!string.Equals(uri.Host, "api.themoviedb.org", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!TmdbUrlHelper.IsTmdbApiHost(uri.Host)) return false;
         return ex is TaskCanceledException || ex is TimeoutException || ex is HttpRequestException || ex is IOException || ex is WebException;
     }
 

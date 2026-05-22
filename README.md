@@ -35,6 +35,7 @@
   - TMDB
   - TheTVDB
   - TVDB 图片域名
+- TMDB API 地址支持配置替代域名：默认 `https://api.tmdb.org`；如果配置留空，则回落到系统默认 `https://api.themoviedb.org`
 - 自动排除本地地址和私有网段：
   - `127.0.0.1`
   - `localhost`

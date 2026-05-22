@@ -17,6 +17,11 @@
                         <div class="fieldDescription">用于访问 TMDB API。电影 / 剧集 / 分季 / 分集 / 人物都会优先使用 TMDB。</div>
                     </div>
                     <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="tmdbApiBaseUrl">TMDB API 替代地址</label>
+                        <input id="tmdbApiBaseUrl" name="tmdbApiBaseUrl" type="text" placeholder="https://api.tmdb.org" />
+                        <div class="fieldDescription">默认使用 https://api.tmdb.org；如果留空，则使用 Emby/TMDB 系统默认地址 https://api.themoviedb.org。可以只填域名，插件会自动补 /3。</div>
+                    </div>
+                    <div class="inputContainer">
                         <label class="inputLabel inputLabelUnfocused" for="tmdbLanguage">TMDB 语言</label>
                         <input id="tmdbLanguage" name="tmdbLanguage" type="text" placeholder="zh-CN" />
                     </div>

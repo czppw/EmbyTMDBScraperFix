@@ -13,7 +13,6 @@ namespace EmbyTMDBScraperFix.Services;
 
 public sealed class TmdbApiClient
 {
-    private const string BaseUrl = "https://api.themoviedb.org/3";
     private readonly ProxyHttpClientService _http;
     private readonly PluginLogService _log;
 
@@ -73,6 +72,12 @@ public sealed class TmdbApiClient
     public string GetImageUrl(string? path, string size = "original")
         => string.IsNullOrWhiteSpace(path) ? string.Empty : $"https://image.tmdb.org/t/p/{size}{path}";
 
+    private static string BuildBaseUrl(PluginConfiguration cfg)
+    {
+        var configured = TmdbUrlHelper.ResolveApiBaseUrl(cfg.TmdbApiBaseUrl);
+        return string.IsNullOrWhiteSpace(cfg.TmdbApiBaseUrl) ? TmdbUrlHelper.SystemDefaultApiBaseUrl + "/3" : configured;
+    }
+
     private async Task<T?> GetJsonAsync<T>(string path, IDictionary<string, string> query, PluginConfiguration cfg, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(cfg.TmdbApiKey))
@@ -85,7 +90,7 @@ public sealed class TmdbApiClient
         query["language"] = string.IsNullOrWhiteSpace(cfg.TmdbLanguage) ? "zh-CN" : cfg.TmdbLanguage;
         if (!string.IsNullOrWhiteSpace(cfg.TmdbRegion)) query["region"] = cfg.TmdbRegion;
 
-        var url = BaseUrl + path + "?" + BuildQuery(query);
+        var url = BuildBaseUrl(cfg) + path + "?" + BuildQuery(query);
 
         try
         {

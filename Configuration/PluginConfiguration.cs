@@ -13,6 +13,7 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool EnableLegacyGlobalProxyHook { get; set; } = false;
 
     public string TmdbApiKey { get; set; } = string.Empty;
+    public string TmdbApiBaseUrl { get; set; } = "https://api.tmdb.org";
     public string TmdbLanguage { get; set; } = "zh-CN";
     public string TmdbRegion { get; set; } = "CN";
     public bool EnableAdultMetadata { get; set; } = false;

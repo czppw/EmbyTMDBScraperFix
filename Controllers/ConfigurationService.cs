@@ -24,6 +24,7 @@ public sealed class UpdateFixConfiguration : IReturn<PluginConfiguration>
     public bool EnableLegacyGlobalProxyHook { get; set; }
 
     public string TmdbApiKey { get; set; } = string.Empty;
+    public string TmdbApiBaseUrl { get; set; } = "https://api.tmdb.org";
     public string TmdbLanguage { get; set; } = "zh-CN";
     public string TmdbRegion { get; set; } = "CN";
     public bool EnableAdultMetadata { get; set; }
@@ -50,6 +51,7 @@ public sealed class TestFixProxy : IReturn<object>
     public string ProxyPassword { get; set; } = string.Empty;
     public bool EnableLegacyGlobalProxyHook { get; set; }
     public string TmdbApiKey { get; set; } = string.Empty;
+    public string TmdbApiBaseUrl { get; set; } = "https://api.tmdb.org";
 }
 
 [Route("/EmbyTMDBScraperFix/Logs", "GET", Summary = "Get recent plugin logs")]
@@ -113,6 +115,7 @@ public sealed class ConfigurationService : IService
         cfg.EnableLegacyGlobalProxyHook = request.EnableLegacyGlobalProxyHook;
 
         cfg.TmdbApiKey = request.TmdbApiKey ?? string.Empty;
+        cfg.TmdbApiBaseUrl = request.TmdbApiBaseUrl?.Trim() ?? string.Empty;
         cfg.TmdbLanguage = string.IsNullOrWhiteSpace(request.TmdbLanguage) ? "zh-CN" : request.TmdbLanguage;
         cfg.TmdbRegion = string.IsNullOrWhiteSpace(request.TmdbRegion) ? "CN" : request.TmdbRegion;
         cfg.EnableAdultMetadata = request.EnableAdultMetadata;
@@ -144,6 +147,7 @@ public sealed class ConfigurationService : IService
             ProxyPassword = request.ProxyPassword ?? string.Empty,
             EnableLegacyGlobalProxyHook = request.EnableLegacyGlobalProxyHook,
             TmdbApiKey = request.TmdbApiKey ?? string.Empty,
+            TmdbApiBaseUrl = request.TmdbApiBaseUrl?.Trim() ?? string.Empty,
             TmdbLanguage = current.TmdbLanguage,
             TmdbRegion = current.TmdbRegion,
             EnableAdultMetadata = current.EnableAdultMetadata,
