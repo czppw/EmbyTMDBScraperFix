@@ -28,7 +28,7 @@ public sealed class PluginRuntime : IServerEntryPoint
         _log = new PluginLogService(paths);
         _proxyPolicy = new ProxyPolicyService(_log);
         _proxyClient = new ProxyHttpClientService(_proxyPolicy, _log);
-        _scanService = new IncrementalScanService(libraryManager, providerManager, fileSystem, _log);
+        _scanService = new IncrementalScanService(paths, libraryManager, providerManager, fileSystem, _log);
         _taskManager = taskManager;
         _timer = new Timer(OnTimer, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _instance = this;
@@ -57,6 +57,7 @@ public sealed class PluginRuntime : IServerEntryPoint
     {
         var cfg = Configuration;
         _proxyPolicy.ApplyRiskyGlobalHookIfRequested(cfg);
+        _scanService.ApplyConfiguration(cfg);
         var interval = TimeSpan.FromMinutes(Math.Max(1, cfg.ScanIntervalMinutes));
         if (cfg.AutoScanEnabled)
         {
@@ -69,7 +70,6 @@ public sealed class PluginRuntime : IServerEntryPoint
             _log.Info("Auto incremental scan disabled.");
         }
 
-        // 同步更新 Emby 计划任务显示
         try
         {
             var taskWorker = _taskManager.ScheduledTasks
@@ -110,6 +110,7 @@ public sealed class PluginRuntime : IServerEntryPoint
     public void Dispose()
     {
         _timer.Dispose();
+        _scanService.Dispose();
         _proxyPolicy.RemoveRiskyGlobalHook();
         _log.Info("EmbyTMDBScraperFix runtime disposed.");
     }
