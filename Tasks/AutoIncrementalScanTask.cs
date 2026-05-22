@@ -30,12 +30,7 @@ public sealed class AutoIncrementalScanTask : IScheduledTask
 
     public IEnumerable<TaskTriggerInfo> GetDefaultTriggers()
     {
-        yield return new TaskTriggerInfo
-        {
-            Type = "IntervalTrigger",
-            IntervalTicks = TimeSpan.FromMinutes(Math.Max(1, _runtime.Configuration.ScanIntervalMinutes)).Ticks,
-            MaxRuntimeTicks = TimeSpan.FromMinutes(8).Ticks
-        };
+        return Array.Empty<TaskTriggerInfo>();
     }
 }
 

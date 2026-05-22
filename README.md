@@ -90,6 +90,8 @@
 ### 5. 增量自动扫描
 
 - 默认 **10 分钟**扫描一次
+- 周期自动扫描由插件内部后台定时器驱动，配置页保存后会立即按 `ScanIntervalMinutes` 生效
+- Emby 计划任务页中的 `EmbyTMDBScraperFix Auto Incremental Scan` 仅保留为手动运行入口，不再作为周期调度真值来源
 - 仅检测：
   - 新增文件
   - 修改文件
@@ -225,6 +227,8 @@ bin/Release/netstandard2.0/EmbyTMDBScraperFix.dll
 - `AutoMetadataRefresh`
 - `MaxScrapeRetryCount`
 - `Libraries`
+
+> 注：周期自动扫描以插件配置页里的 `ScanIntervalMinutes` 为准，由插件内部后台定时器执行；计划任务页主要用于手动触发一次扫描。
 
 ---
 
