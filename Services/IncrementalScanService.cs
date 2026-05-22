@@ -31,7 +31,8 @@ public sealed class IncrementalScanService : IDisposable
     {
         ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".m4v", ".ts", ".m2ts", ".flv", ".webm",
         ".mp3", ".flac", ".aac", ".m4a", ".wav", ".ape", ".ogg",
-        ".nfo", ".srt", ".ass", ".ssa", ".sub"
+        ".nfo", ".srt", ".ass", ".ssa", ".sub",
+        ".strm"
     };
 
     public IncrementalScanService(IApplicationPaths paths, ILibraryManager libraryManager, IProviderManager providerManager, IFileSystem fileSystem, PluginLogService log)
