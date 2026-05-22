@@ -128,7 +128,13 @@ public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<Movie, M
         var result = new MetadataResult<Movie>();
         var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
         var tmdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
-        if (string.IsNullOrWhiteSpace(tmdbId)) return result;
+        if (string.IsNullOrWhiteSpace(tmdbId))
+        {
+            var search = await GetSearchResults(info, cancellationToken).ConfigureAwait(false);
+            var match = search.FirstOrDefault();
+            if (match == null || !match.ProviderIds.TryGetValue("Tmdb", out tmdbId) || string.IsNullOrWhiteSpace(tmdbId)) return result;
+        }
+
         var data = await _tmdb.GetMovieAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
 
         if (data == null)
@@ -215,6 +221,13 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
         var result = new MetadataResult<Series>();
         var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
         var tmdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
+        if (string.IsNullOrWhiteSpace(tmdbId))
+        {
+            var tmdbSearch = await GetSearchResults(info, cancellationToken).ConfigureAwait(false);
+            var firstTmdb = tmdbSearch.FirstOrDefault(x => x.ProviderIds.ContainsKey("Tmdb"));
+            if (firstTmdb != null) firstTmdb.ProviderIds.TryGetValue("Tmdb", out tmdbId);
+        }
+
         if (!string.IsNullOrWhiteSpace(tmdbId))
         {
             var data = await _tmdb.GetSeriesAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
@@ -588,6 +601,13 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
         var result = new MetadataResult<Person>();
         var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
         var tmdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
+        if (string.IsNullOrWhiteSpace(tmdbId) && !string.IsNullOrWhiteSpace(info.Name))
+        {
+            var tmdbSearch = await GetSearchResults(info, cancellationToken).ConfigureAwait(false);
+            var firstTmdb = tmdbSearch.FirstOrDefault(x => x.ProviderIds.ContainsKey("Tmdb"));
+            if (firstTmdb != null) firstTmdb.ProviderIds.TryGetValue("Tmdb", out tmdbId);
+        }
+
         if (!string.IsNullOrWhiteSpace(tmdbId))
         {
             var safeTmdbId = tmdbId;
