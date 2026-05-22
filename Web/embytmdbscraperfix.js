@@ -54,7 +54,7 @@ define(['loading', 'emby-input', 'emby-button', 'emby-checkbox'], function (load
         qs(view, '#proxyPassword').value = cfg.ProxyPassword || '';
         setBool(view, 'enableLegacyGlobalProxyHook', cfg.EnableLegacyGlobalProxyHook);
         qs(view, '#tmdbApiKey').value = cfg.TmdbApiKey || '';
-        qs(view, '#tmdbApiBaseUrl').value = cfg.TmdbApiBaseUrl || 'https://api.tmdb.org';
+        qs(view, '#tmdbApiBaseUrl').value = Object.prototype.hasOwnProperty.call(cfg, 'TmdbApiBaseUrl') ? (cfg.TmdbApiBaseUrl || '') : 'https://api.tmdb.org';
         qs(view, '#tmdbLanguage').value = cfg.TmdbLanguage || 'zh-CN';
         qs(view, '#tmdbRegion').value = cfg.TmdbRegion || 'CN';
         setBool(view, 'enableAdultMetadata', cfg.EnableAdultMetadata);
