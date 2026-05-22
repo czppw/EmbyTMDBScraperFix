@@ -27,6 +27,12 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
 
     public override string Description => "HTTP proxy-aware TMDB/TVDB scraper provider with incremental auto-scan for Emby.";
 
+    public override void UpdateConfiguration(BasePluginConfiguration configuration)
+    {
+        base.UpdateConfiguration(configuration);
+        try { PluginRuntime.Instance.ApplyConfiguration(); } catch { }
+    }
+
     public IEnumerable<PluginPageInfo> GetPages()
     {
         yield return new PluginPageInfo

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbyTMDBScraperFix.Configuration;
@@ -8,6 +9,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
+using MediaBrowser.Model.Tasks;
 
 namespace EmbyTMDBScraperFix;
 
@@ -19,13 +21,15 @@ public sealed class PluginRuntime : IServerEntryPoint
     private readonly ProxyHttpClientService _proxyClient;
     private readonly IncrementalScanService _scanService;
     private readonly PluginLogService _log;
+    private readonly ITaskManager _taskManager;
 
-    public PluginRuntime(IApplicationPaths paths, ILibraryManager libraryManager, IProviderManager providerManager, IFileSystem fileSystem)
+    public PluginRuntime(IApplicationPaths paths, ILibraryManager libraryManager, IProviderManager providerManager, IFileSystem fileSystem, ITaskManager taskManager)
     {
         _log = new PluginLogService(paths);
         _proxyPolicy = new ProxyPolicyService(_log);
         _proxyClient = new ProxyHttpClientService(_proxyPolicy, _log);
         _scanService = new IncrementalScanService(libraryManager, providerManager, fileSystem, _log);
+        _taskManager = taskManager;
         _timer = new Timer(OnTimer, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _instance = this;
     }
@@ -63,6 +67,35 @@ public sealed class PluginRuntime : IServerEntryPoint
         {
             _timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             _log.Info("Auto incremental scan disabled.");
+        }
+
+        // 同步更新 Emby 计划任务显示
+        try
+        {
+            var taskWorker = _taskManager.ScheduledTasks
+                .FirstOrDefault(t => t.ScheduledTask.Key == "EmbyTMDBScraperFixAutoIncrementalScan");
+            if (taskWorker != null)
+            {
+                taskWorker.Triggers = new[]
+                {
+                    new TaskTriggerInfo
+                    {
+                        Type = "IntervalTrigger",
+                        IntervalTicks = interval.Ticks,
+                        MaxRuntimeTicks = TimeSpan.FromMinutes(8).Ticks
+                    }
+                };
+                taskWorker.ReloadTriggerEvents();
+                _log.Info($"Emby scheduled task trigger updated to {interval.TotalMinutes} minutes.");
+            }
+            else
+            {
+                _log.Warn("Scheduled task not found for trigger update.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Failed to update scheduled task trigger: {ex.Message}", ex);
         }
     }
 
