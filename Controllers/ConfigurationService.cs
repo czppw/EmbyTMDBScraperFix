@@ -87,6 +87,21 @@ public sealed class ResolveFixInternalId : IReturn<object>
     public long Id { get; set; }
 }
 
+public sealed class ItemDiagnosticInfo
+{
+    public string RuntimeType { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
+    public string ContainingFolderPath { get; set; } = string.Empty;
+    public int? IndexNumber { get; set; }
+    public int? ParentIndexNumber { get; set; }
+    public int? RecursiveItemCount { get; set; }
+    public Dictionary<string, string> ProviderIds { get; set; } = new();
+    public string? SeasonSeriesName { get; set; }
+    public string? SeasonSeriesPath { get; set; }
+    public string? EpisodeSeriesName { get; set; }
+}
+
 public sealed class ConfigurationService : IService
 {
     private readonly ILibraryManager _libraryManager;
@@ -265,26 +280,26 @@ public sealed class ConfigurationService : IService
         return await PluginRuntime.Instance.ProxyClient.TestProxyAsync(cfg, default).ConfigureAwait(false);
     }
 
-    private static object? DescribeItem(BaseItem? item)
+    private static ItemDiagnosticInfo? DescribeItem(BaseItem? item)
     {
         if (item == null)
         {
             return null;
         }
 
-        return new
+        return new ItemDiagnosticInfo
         {
-            runtimeType = item.GetType().FullName,
-            name = item.Name,
-            path = item.Path,
-            containingFolderPath = item.ContainingFolderPath,
-            indexNumber = item.IndexNumber,
-            parentIndexNumber = item.ParentIndexNumber,
-            recursiveItemCount = item.RecursiveItemCount,
-            providerIds = item.ProviderIds.ToDictionary(x => x.Key, x => x.Value),
-            seasonSeriesName = item is Season season ? season.SeriesName : null,
-            seasonSeriesPath = item is Season seasonWithSeries ? seasonWithSeries.Series?.Path : null,
-            episodeSeriesName = item is Episode episode ? episode.SeriesName : null
+            RuntimeType = item.GetType().FullName ?? string.Empty,
+            Name = item.Name ?? string.Empty,
+            Path = item.Path ?? string.Empty,
+            ContainingFolderPath = item.ContainingFolderPath ?? string.Empty,
+            IndexNumber = item.IndexNumber,
+            ParentIndexNumber = item.ParentIndexNumber,
+            RecursiveItemCount = item.RecursiveItemCount,
+            ProviderIds = item.ProviderIds.ToDictionary(x => x.Key, x => x.Value),
+            SeasonSeriesName = item is Season season ? season.SeriesName : null,
+            SeasonSeriesPath = item is Season seasonWithSeries ? seasonWithSeries.Series?.Path : null,
+            EpisodeSeriesName = item is Episode episode ? episode.SeriesName : null
         };
     }
 }
