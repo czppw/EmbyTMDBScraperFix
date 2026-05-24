@@ -148,20 +148,26 @@ internal static class MetadataProviderFactory
     public static int? ParseYear(string? value) => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt) ? dt.Year : int.TryParse(value, out var year) ? year : null;
     public static DateTimeOffset? ParseDate(string? value) => DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dt) ? dt : null;
 
-    public static IEnumerable<RemoteImageInfo> BuildRemoteImages(string providerName, string language, params (string url, string thumb, ImageType type)[] defs)
+    public static IEnumerable<RemoteImageInfo> BuildRemoteImages(string providerName, string? language, params (string url, string thumb, ImageType type)[] defs)
     {
         foreach (var (url, thumb, type) in defs)
         {
             if (!string.IsNullOrWhiteSpace(url))
             {
-                yield return new RemoteImageInfo
+                var image = new RemoteImageInfo
                 {
                     ProviderName = providerName,
                     Url = url,
                     ThumbnailUrl = string.IsNullOrWhiteSpace(thumb) ? url : thumb,
-                    Type = type,
-                    Language = language
+                    Type = type
                 };
+
+                if (!string.IsNullOrWhiteSpace(language))
+                {
+                    image.Language = language;
+                }
+
+                yield return image;
             }
         }
     }
@@ -478,7 +484,7 @@ public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<Movie, M
             return Array.Empty<RemoteImageInfo>();
         }
 
-        var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+        var images = MetadataProviderFactory.BuildRemoteImages(Name, null,
             (_tmdb.GetImageUrl(data.Poster_Path), _tmdb.GetImageUrl(data.Poster_Path, "w500"), ImageType.Primary),
             (_tmdb.GetImageUrl(data.Backdrop_Path), _tmdb.GetImageUrl(data.Backdrop_Path, "w780"), ImageType.Backdrop)).ToArray();
         MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for movie '{item.Name ?? string.Empty}'. Count={images.Length}.");
@@ -647,7 +653,7 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
             var data = await _tmdb.GetSeriesAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
-                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, null,
                     (_tmdb.GetImageUrl(data.Poster_Path), _tmdb.GetImageUrl(data.Poster_Path, "w500"), ImageType.Primary),
                     (_tmdb.GetImageUrl(data.Backdrop_Path), _tmdb.GetImageUrl(data.Backdrop_Path, "w780"), ImageType.Backdrop)).ToArray();
                 MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for series '{item.Name ?? string.Empty}'. Count={images.Length}.");
@@ -663,7 +669,7 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
             var data = await _tvdb.GetSeriesAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data?.Data != null)
             {
-                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, null,
                     (_tvdb.NormalizeImageUrl(data.Data.Image), _tvdb.NormalizeImageUrl(data.Data.Image), ImageType.Primary)).ToArray();
                 MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for series '{item.Name ?? string.Empty}' via TVDB. Count={images.Length}.");
                 return images;
@@ -797,7 +803,7 @@ public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season,
                 var data = await _tmdb.GetSeasonAsync(safeTmdbSeriesId, seasonItem.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
                 if (data != null)
                 {
-                    var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+                    var images = MetadataProviderFactory.BuildRemoteImages(Name, null,
                         (_tmdb.GetImageUrl(data.Poster_Path), _tmdb.GetImageUrl(data.Poster_Path, "w500"), ImageType.Primary)).ToArray();
                     MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for season '{item.Name ?? string.Empty}'. Count={images.Length}.");
                     return images;
@@ -813,7 +819,7 @@ public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season,
             var season = await _tvdb.GetSeasonAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (season?.Data != null)
             {
-                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, null,
                     (_tvdb.NormalizeImageUrl(season.Data.Image), _tvdb.NormalizeImageUrl(season.Data.Image), ImageType.Primary)).ToArray();
                 MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for season '{item.Name ?? string.Empty}' via TVDB. Count={images.Length}.");
                 return images;
@@ -954,7 +960,7 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
             var data = await _tmdb.GetEpisodeAsync(tmdbSeriesId, seasonNumber, episodeNumber, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
-                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, null,
                     (_tmdb.GetImageUrl(data.Still_Path, "original"), _tmdb.GetImageUrl(data.Still_Path, "w780"), ImageType.Primary)).ToArray();
                 MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for episode '{item.Name ?? string.Empty}'. Count={images.Length}.");
                 return images;
@@ -1095,7 +1101,7 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
             var data = await _tmdb.GetPersonAsync(safeTmdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
-                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, null,
                     (_tmdb.GetImageUrl(data.Profile_Path), _tmdb.GetImageUrl(data.Profile_Path, "w500"), ImageType.Primary)).ToArray();
                 MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for person '{item.Name ?? string.Empty}'. Count={images.Length}.");
                 return images;
@@ -1110,7 +1116,7 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
             var person = await _tvdb.GetPersonAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (person?.Data != null)
             {
-                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, null,
                     (_tvdb.NormalizeImageUrl(person.Data.Image), _tvdb.NormalizeImageUrl(person.Data.Image), ImageType.Primary)).ToArray();
                 MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for person '{item.Name ?? string.Empty}' via TVDB. Count={images.Length}.");
                 return images;
