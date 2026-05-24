@@ -74,6 +74,19 @@ public sealed class ResolveFixPath : IReturn<object>
     public string Path { get; set; } = string.Empty;
 }
 
+[Route("/EmbyTMDBScraperFix/Diagnostics/ListIndexedItems", "GET", Summary = "List indexed Emby items under a path prefix")]
+public sealed class ListFixIndexedItems : IReturn<object>
+{
+    public string Path { get; set; } = string.Empty;
+    public int Limit { get; set; } = 200;
+}
+
+[Route("/EmbyTMDBScraperFix/Diagnostics/ResolveInternalId", "GET", Summary = "Resolve an Emby internal item id")]
+public sealed class ResolveFixInternalId : IReturn<object>
+{
+    public long Id { get; set; }
+}
+
 public sealed class ConfigurationService : IService
 {
     private readonly ILibraryManager _libraryManager;
@@ -137,6 +150,55 @@ public sealed class ConfigurationService : IService
             parentFolder = !string.IsNullOrWhiteSpace(parent) ? DescribeItem(_libraryManager.FindByPath(parent, true)) : null,
             grandParentAuto = !string.IsNullOrWhiteSpace(grandParent) ? DescribeItem(_libraryManager.FindByPath(grandParent, null)) : null,
             grandParentFolder = !string.IsNullOrWhiteSpace(grandParent) ? DescribeItem(_libraryManager.FindByPath(grandParent, true)) : null
+        };
+    }
+
+    public object Get(ListFixIndexedItems request)
+    {
+        var path = request.Path?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("Path is required.");
+        }
+
+        var query = new InternalItemsQuery
+        {
+            PathStartsWith = path,
+            PathIgnoreCase = true,
+            Recursive = true
+        };
+
+        var items = _libraryManager.GetItemList(query)
+            .Take(Math.Max(1, request.Limit))
+            .Select(DescribeItem)
+            .Where(x => x != null)
+            .ToList();
+
+        return new
+        {
+            inputPath = path,
+            count = items.Count,
+            items
+        };
+    }
+
+    public object Get(ResolveFixInternalId request)
+    {
+        if (request.Id <= 0)
+        {
+            throw new ArgumentException("Id must be greater than 0.");
+        }
+
+        var query = new InternalItemsQuery
+        {
+            ItemIds = new[] { request.Id }
+        };
+
+        var item = _libraryManager.GetItemList(query).FirstOrDefault();
+        return new
+        {
+            inputId = request.Id,
+            item = DescribeItem(item)
         };
     }
 
