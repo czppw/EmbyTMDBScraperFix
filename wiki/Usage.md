@@ -1,28 +1,87 @@
 # 使用说明
 
-## 在媒体库中使用 EmbyTMDBScraperFix
+## 推荐目录结构
 
-### 创建媒体库时
-在 Emby 控制台 → 媒体库 → 新增媒体库：
-1. 选择内容类型（电影 / 电视剧）
-2. 选择媒体文件夹
-3. 在 **元数据下载器** 中勾选 `EmbyTMDBScraperFix TMDB Movie`（电影）或 `EmbyTMDBScraperFix TMDB Series`（电视剧）
-4. 建议取消勾选其他 TMDB/TheMovieDb 刮削器以避免冲突
+电影：
 
-### 已有媒体库
-Emby 控制台 → 媒体库 → 编辑 → 元数据下载器 → 添加 `EmbyTMDBScraperFix` 系列刮削器
+```text
+/Movies/方世玉 (1993).strm
+```
 
-### .strm 文件支持
-插件完整支持 `.strm` 文件的增删改监控与元数据刮削：
-- 新增 `.strm` → 自动检测并入库
-- 修改 `.strm` → 触发元数据刷新
-- 删除 `.strm` → 自动出库
+剧集：
 
-### 自动增量扫描
-插件内置事件驱动增量扫描，工作原理：
-1. 使用 `FileSystemWatcher` 实时监听媒体目录
-2. 增删改事件写入持久化队列（`pending-changes.json`）
-3. 定时消费队列，将变更通知 Emby
-4. **Emby 重启后** 未消费的队列事件仍可恢复
+```text
+/TV/请回答1988 (2015)/Season 01/请回答1988 (2015) - S01E01.strm
+```
 
-> ⚠️ 注意：插件内部使用独立定时器运行扫描，与 Emby 自带的"扫描媒体库"计划任务互相独立。插件配置页修改扫描间隔后会同步更新 Emby 计划任务显示。
+## 最小验证流程
+
+### 1. 代理验证
+
+在插件配置页填写代理和 TMDB API Key 后点击“测试代理”。
+
+验证点：
+
+- `api.tmdb.org` 可访问
+- 图片域名可访问
+- 日志中不明文泄露 API Key
+
+### 2. 电影验证
+
+选择一个电影，刷新元数据并确认：
+
+- 名称
+- 简介
+- TMDB ID
+- 人物
+- 海报
+
+### 3. 剧集验证
+
+选择一个剧集，确认：
+
+- `Series -> Season -> Episode` 层级正常
+- 所有分集都有 `Tmdb ID`
+- `IndexNumber` 和 `ParentIndexNumber` 正常
+- 分集中文名称正常
+
+### 4. 分集图片验证
+
+确认日志中出现：
+
+- `GetImages start`
+- `GetImages finished`
+
+并在 Emby 中确认图片已写入 `ImageTags`。
+
+### 5. `.strm` 增量验证
+
+新增或修改一个 `.strm` 文件后，确认日志出现增量扫描记录。
+
+## 历史异常条目修复
+
+### 修复缺失分集编号
+
+单集：
+
+```text
+POST /EmbyTMDBScraperFix/Diagnostics/FillEpisodeNumbersFromPath
+```
+
+批量：
+
+```text
+POST /EmbyTMDBScraperFix/Diagnostics/RepairEpisodeNumbers
+```
+
+### 查看远程图片提供器
+
+```text
+GET /EmbyTMDBScraperFix/Diagnostics/RemoteImages
+```
+
+### 强制刷新条目
+
+```text
+POST /EmbyTMDBScraperFix/Diagnostics/RefreshItem
+```

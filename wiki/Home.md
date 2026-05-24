@@ -1,17 +1,30 @@
-# EmbyTMDBScraperFix
+# EmbyTMDBScraperFix Wiki
 
-Emby TMDB 刮削修复插件，专为中国大陆网络环境优化。
+`EmbyTMDBScraperFix` 是一个面向中国大陆网络环境优化的 Emby 元数据插件。
 
-## 特性
-- 🔄 **TMDB 请求代理** — 支持 HTTP/SOCKS5 代理访问 TMDB API
-- 🏠 **自定义 API 基址** — 支持配置 TMDB 镜像站地址
-- ⏱ **增量自动扫描** — 定时检测媒体库变更，可自定义扫描间隔
-- 📺 **双数据源** — TMDB 为主，TVDB 为可选补充
-- 🎬 **全面支持** — 电影、电视剧、分季、剧集元数据刮削
+当前版本：`v1.1.0`
+
+## 功能概览
+
+- TMDB 主源抓取
+- TVDB 可选回退
+- 电影 / 剧集 / 分季 / 分集 / 人物元数据
+- 电影海报、剧集海报、分集图片
+- `.strm` 文件支持
+- 自动增量扫描与元数据刷新
+- 诊断与批量修复接口
+
+## 导航
+
+- [安装指南](Installation.md)
+- [配置说明](Configuration.md)
+- [使用说明](Usage.md)
+- [更新日志](Changelog.md)
 
 ## 快速开始
+
 1. 从 [Releases](https://github.com/czppw/EmbyTMDBScraperFix/releases) 下载 `EmbyTMDBScraperFix.dll`
-2. 放入 Emby 的 `plugins` 目录
-3. 重启 Emby Server
-4. 进入 Emby 控制台 → 插件 → EmbyTMDBScraperFix → 配置
-5. 填入 TMDB API Key 并保存
+2. 复制到 Emby 插件目录
+3. 重启 Emby
+4. 在库设置中启用插件抓取器
+5. 刷新一个电影和一个剧集做最小验证

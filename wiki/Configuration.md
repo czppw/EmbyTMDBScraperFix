@@ -1,19 +1,57 @@
 # 配置说明
 
-## TMDB API Key
-在 [TMDB API 设置页](https://www.themoviedb.org/settings/api) 申请免费 API Key。
+## TMDB
 
-## 代理设置
-| 字段 | 说明 |
-|------|------|
-| 启用代理 | 开启/关闭代理功能 |
-| 代理主机 | 代理服务器地址 |
-| 代理端口 | 代理服务器端口 |
-| 代理用户名/密码 | 可选认证信息 |
+- `TMDB API Key`：必填
+- `TMDB Language`：建议 `zh-CN`
+- `TMDB Region`：建议按实际地区设置
+- `EnableAdultMetadata`：按需开启
 
-## 扫描设置
-| 字段 | 说明 |
-|------|------|
-| 扫描间隔 | 自动扫描间隔（最小 1 分钟） |
-| 自动元数据刷新 | 新文件入库后自动刮削 |
-| 最大重试次数 | 刮削失败重试次数 |
+## TVDB 回退
+
+- `EnableTvdbFallback`
+- `TvdbApiKey`
+- `TvdbPin`
+- `TvdbLanguage`
+
+仅当 TMDB 数据不完整或希望多源回退时开启。
+
+## 代理
+
+- `ProxyEnabled`
+- `ProxyHost`
+- `ProxyPort`
+- `ProxyUsername`
+- `ProxyPassword`
+- `EnableLegacyGlobalProxyHook`
+
+说明：
+
+- 当前主要支持 `HTTP Proxy`
+- 推荐优先使用插件内部代理，不建议默认开启高风险全局 Hook
+
+## 自动扫描
+
+- `AutoScanEnabled`
+- `ScanIntervalMinutes`
+- `AutoMetadataRefresh`
+- `MaxScrapeRetryCount`
+- `Libraries`
+
+建议：
+
+- 扫描间隔不低于 `1` 分钟
+- `.strm` 环境建议开启自动元数据刷新
+- 仅勾选需要监控的媒体库
+
+## 库内抓取器建议
+
+电影：
+
+- `Metadata Fetchers`: `EmbyTMDBScraperFix TMDB Movie`
+- `Image Fetchers`: 插件图片提供器
+
+剧集：
+
+- `Metadata Fetchers`: `EmbyTMDBScraperFix TMDB Series`
+- `Image Fetchers`: 插件图片提供器
