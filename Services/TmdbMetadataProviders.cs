@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbyTMDBScraperFix.Configuration;
@@ -20,6 +21,9 @@ namespace EmbyTMDBScraperFix.Services;
 
 internal static class MetadataProviderFactory
 {
+    private static readonly Regex StandardEpisodePattern = new(@"(?<!\d)[Ss](?<season>\d{1,2})[\s._-]*[Ee](?<episode>\d{1,3})(?!\d)", RegexOptions.Compiled);
+    private static readonly Regex AlternateEpisodePattern = new(@"(?<!\d)(?<season>\d{1,2})x(?<episode>\d{1,3})(?!\d)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public static TmdbApiClient CreateTmdbClient(IApplicationPaths paths)
     {
         var log = new PluginLogService(paths);
@@ -52,6 +56,58 @@ internal static class MetadataProviderFactory
         {
             runtime.Log.Info($"[{providerName}] {message}");
         }
+    }
+
+    public static bool TryResolveEpisodeNumbers(int? seasonNumber, int? episodeNumber, params string?[] candidates)
+    {
+        return TryResolveEpisodeNumbers(seasonNumber, episodeNumber, out _, out _, candidates);
+    }
+
+    public static bool TryResolveEpisodeNumbers(int? seasonNumber, int? episodeNumber, out int resolvedSeasonNumber, out int resolvedEpisodeNumber, params string?[] candidates)
+    {
+        if (seasonNumber.HasValue && episodeNumber.HasValue)
+        {
+            resolvedSeasonNumber = seasonNumber.Value;
+            resolvedEpisodeNumber = episodeNumber.Value;
+            return true;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (TryParseEpisodeNumbers(candidate, out resolvedSeasonNumber, out resolvedEpisodeNumber))
+            {
+                return true;
+            }
+        }
+
+        resolvedSeasonNumber = 0;
+        resolvedEpisodeNumber = 0;
+        return false;
+    }
+
+    public static bool TryParseEpisodeNumbers(string? value, out int seasonNumber, out int episodeNumber)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            seasonNumber = 0;
+            episodeNumber = 0;
+            return false;
+        }
+
+        foreach (var pattern in new[] { StandardEpisodePattern, AlternateEpisodePattern })
+        {
+            var match = pattern.Match(value);
+            if (match.Success
+                && int.TryParse(match.Groups["season"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out seasonNumber)
+                && int.TryParse(match.Groups["episode"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out episodeNumber))
+            {
+                return true;
+            }
+        }
+
+        seasonNumber = 0;
+        episodeNumber = 0;
+        return false;
     }
 
     public static RemoteSearchResult ToTmdbRemoteSearchResult(TmdbSearchItem item, string providerName, string? imageUrl, bool isSeries)
@@ -800,14 +856,17 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
     {
         var result = new MetadataResult<Episode>();
         var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
-        if (!info.ParentIndexNumber.HasValue || !info.IndexNumber.HasValue) return result;
+        if (!MetadataProviderFactory.TryResolveEpisodeNumbers(info.ParentIndexNumber, info.IndexNumber, out var seasonNumber, out var episodeNumber, info.Path, info.Name))
+        {
+            return result;
+        }
 
         string? seriesTmdbId = null;
         if (info.SeriesProviderIds != null) info.SeriesProviderIds.TryGetValue("Tmdb", out seriesTmdbId);
         if (!string.IsNullOrWhiteSpace(seriesTmdbId))
         {
             var safeSeriesTmdbId = seriesTmdbId;
-            var data = await _tmdb.GetEpisodeAsync(safeSeriesTmdbId, info.ParentIndexNumber.Value, info.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
+            var data = await _tmdb.GetEpisodeAsync(safeSeriesTmdbId, seasonNumber, episodeNumber, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
                 var item = new Episode
@@ -815,7 +874,9 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
                     Name = data.Name ?? info.Name,
                     Overview = data.Overview,
                     PremiereDate = MetadataProviderFactory.ParseDate(data.Air_Date),
-                    CommunityRating = (float?)data.Vote_Average
+                    CommunityRating = (float?)data.Vote_Average,
+                    ParentIndexNumber = seasonNumber,
+                    IndexNumber = episodeNumber
                 };
                 item.ProviderIds["Tmdb"] = data.Id.ToString(CultureInfo.InvariantCulture);
                 result.Item = item;
@@ -841,11 +902,11 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
             {
                 var safeTvdbSeriesId = tvdbSeriesId;
                 var series = await _tvdb.GetSeriesAsync(safeTvdbSeriesId, cfg, cancellationToken).ConfigureAwait(false);
-                var seasonSummary = series?.Data?.Seasons?.FirstOrDefault(x => x.Number == info.ParentIndexNumber.Value);
+                var seasonSummary = series?.Data?.Seasons?.FirstOrDefault(x => x.Number == seasonNumber);
                 if (seasonSummary != null)
                 {
                     var season = await _tvdb.GetSeasonAsync(seasonSummary.Id.ToString(CultureInfo.InvariantCulture), cfg, cancellationToken).ConfigureAwait(false);
-                    var episodeSummary = season?.Data?.Episodes?.FirstOrDefault(x => x.Number == info.IndexNumber.Value);
+                    var episodeSummary = season?.Data?.Episodes?.FirstOrDefault(x => x.Number == episodeNumber);
                     if (episodeSummary != null)
                     {
                         var episode = await _tvdb.GetEpisodeAsync(episodeSummary.Id.ToString(CultureInfo.InvariantCulture), cfg, cancellationToken).ConfigureAwait(false);
@@ -855,7 +916,9 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
                             {
                                 Name = episode.Data.Name ?? info.Name,
                                 Overview = episode.Data.Overview,
-                                PremiereDate = MetadataProviderFactory.ParseDate(episode.Data.Aired)
+                                PremiereDate = MetadataProviderFactory.ParseDate(episode.Data.Aired),
+                                ParentIndexNumber = seasonNumber,
+                                IndexNumber = episodeNumber
                             };
                             item.ProviderIds["Tvdb"] = episode.Data.Id.ToString(CultureInfo.InvariantCulture);
                             result.Item = item;
@@ -884,10 +947,11 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
         }
 
         var tmdbSeriesId = episodeItem.Series?.ProviderIds.TryGetValue("Tmdb", out var sid) == true ? sid : null;
-        if (!string.IsNullOrWhiteSpace(tmdbSeriesId) && episodeItem.ParentIndexNumber.HasValue && episodeItem.IndexNumber.HasValue)
+        if (!string.IsNullOrWhiteSpace(tmdbSeriesId)
+            && MetadataProviderFactory.TryResolveEpisodeNumbers(episodeItem.ParentIndexNumber, episodeItem.IndexNumber, out var seasonNumber, out var episodeNumber, episodeItem.Path, episodeItem.Name))
         {
-            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages start for episode '{item.Name ?? string.Empty}'. SeriesTmdbId='{tmdbSeriesId}', Season={episodeItem.ParentIndexNumber.Value}, Episode={episodeItem.IndexNumber.Value}.");
-            var data = await _tmdb.GetEpisodeAsync(tmdbSeriesId, episodeItem.ParentIndexNumber.Value, episodeItem.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
+            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages start for episode '{item.Name ?? string.Empty}'. SeriesTmdbId='{tmdbSeriesId}', Season={seasonNumber}, Episode={episodeNumber}.");
+            var data = await _tmdb.GetEpisodeAsync(tmdbSeriesId, seasonNumber, episodeNumber, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
                 var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,

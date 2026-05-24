@@ -121,6 +121,17 @@ public sealed class FillFixEpisodeNumbersFromPath : IReturn<object>
     public bool RefreshMetadataAfterPersist { get; set; }
 }
 
+[Route("/EmbyTMDBScraperFix/Diagnostics/RepairEpisodeNumbers", "POST", Summary = "Repair missing episode numbers for all episodes under a series or folder")]
+public sealed class RepairFixEpisodeNumbers : IReturn<object>
+{
+    public long Id { get; set; }
+    public bool ForceRefresh { get; set; } = true;
+    public bool Persist { get; set; } = true;
+    public bool RefreshMetadataAfterPersist { get; set; }
+    public bool OnlyMissing { get; set; } = true;
+    public int Limit { get; set; } = 500;
+}
+
 public sealed class ItemDiagnosticInfo
 {
     public string EntityId { get; set; } = string.Empty;
@@ -387,6 +398,86 @@ public sealed class ConfigurationService : IService
         };
     }
 
+    public async Task<object> Post(RepairFixEpisodeNumbers request)
+    {
+        if (request.Id <= 0)
+        {
+            throw new ArgumentException("Id must be greater than 0.");
+        }
+
+        var root = GetRequiredItem(request.Id);
+        if (string.IsNullOrWhiteSpace(root.Path))
+        {
+            throw new ArgumentException($"Item {request.Id} does not have a filesystem path.");
+        }
+
+        var episodes = _libraryManager.GetItemList(new InternalItemsQuery
+            {
+                PathStartsWith = root.Path,
+                PathIgnoreCase = true,
+                Recursive = true
+            })
+            .OfType<Episode>()
+            .Take(Math.Max(1, request.Limit))
+            .ToList();
+
+        var changed = new List<object>();
+        var inspected = 0;
+        var updatedCount = 0;
+        var persistedCount = 0;
+
+        foreach (var episode in episodes)
+        {
+            inspected++;
+            if (request.OnlyMissing && episode.IndexNumber.HasValue && episode.ParentIndexNumber.HasValue)
+            {
+                continue;
+            }
+
+            var before = DescribeItem(episode);
+            var updated = _libraryManager.FillMissingEpisodeNumbersFromPath(episode, request.ForceRefresh);
+            if (!updated)
+            {
+                continue;
+            }
+
+            updatedCount++;
+            var persisted = false;
+            if (request.Persist)
+            {
+                await _providerManager.SaveMetadata(episode, ItemUpdateType.MetadataEdit).ConfigureAwait(false);
+                persisted = true;
+                persistedCount++;
+
+                if (request.RefreshMetadataAfterPersist)
+                {
+                    await _providerManager.RefreshFullItem(
+                        episode,
+                        CreateRefreshOptions(false, false),
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+
+            changed.Add(new
+            {
+                before,
+                after = DescribeItem(request.Persist ? GetRequiredItem(ReadRequiredInternalId(episode)) : episode),
+                persisted
+            });
+        }
+
+        return new
+        {
+            inputId = request.Id,
+            root = DescribeItem(root),
+            inspected,
+            candidates = episodes.Count,
+            updatedCount,
+            persistedCount,
+            changed
+        };
+    }
+
     public object Post(UpdateFixConfiguration request)
     {
         var plugin = Plugin.Instance ?? throw new InvalidOperationException("Plugin not initialized.");
@@ -595,5 +686,16 @@ public sealed class ConfigurationService : IService
         }
 
         return null;
+    }
+
+    private static long ReadRequiredInternalId(BaseItem item)
+    {
+        var internalId = ReadInt64Property(item, "InternalId");
+        if (!internalId.HasValue)
+        {
+            throw new InvalidOperationException($"Item '{item.Name ?? item.Path ?? item.Id.ToString()}' does not expose InternalId.");
+        }
+
+        return internalId.Value;
     }
 }
