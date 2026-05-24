@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -228,6 +229,56 @@ internal static class MetadataProviderFactory
     public static string? PreferNonEmpty(string? primary, string? fallback)
         => string.IsNullOrWhiteSpace(primary) ? fallback : primary;
 
+    public static string ResolveLookupName(string? explicitName, string? path)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitName))
+        {
+            return explicitName.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        var trimmedPath = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(trimmedPath))
+        {
+            return string.Empty;
+        }
+
+        var candidate = Path.GetFileName(trimmedPath);
+        if (LooksLikeSeasonFolder(candidate))
+        {
+            var parent = Path.GetDirectoryName(trimmedPath);
+            if (!string.IsNullOrWhiteSpace(parent))
+            {
+                candidate = Path.GetFileName(parent);
+            }
+        }
+
+        if (candidate.IndexOf('.') >= 0 || candidate.IndexOf('_') >= 0)
+        {
+            candidate = candidate.Replace('.', ' ').Replace('_', ' ');
+        }
+
+        return candidate?.Trim() ?? string.Empty;
+    }
+
+    private static bool LooksLikeSeasonFolder(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized.StartsWith("season ", StringComparison.Ordinal)
+            || normalized.StartsWith("season_", StringComparison.Ordinal)
+            || normalized.StartsWith("s", StringComparison.Ordinal) && normalized.Length <= 4 && normalized.Skip(1).All(char.IsDigit)
+            || normalized.StartsWith("第", StringComparison.Ordinal) && normalized.EndsWith("季", StringComparison.Ordinal);
+    }
+
     private static PersonType? ToCrewPersonType(string? job)
     {
         if (string.IsNullOrWhiteSpace(job))
@@ -364,11 +415,13 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
 {
     private readonly TmdbApiClient _tmdb;
     private readonly TvdbApiClient _tvdb;
+    private readonly PluginLogService? _log;
 
     public TmdbSeriesMetadataProvider(IApplicationPaths paths)
     {
         _tmdb = MetadataProviderFactory.CreateTmdbClient(paths);
         _tvdb = MetadataProviderFactory.CreateTvdbClient(paths);
+        _log = PluginRuntime.TryGetInstance(out var runtime) ? runtime.Log : new PluginLogService(paths);
     }
 
     public string Name => "EmbyTMDBScraperFix TMDB Series";
@@ -378,18 +431,27 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
 
     public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(SeriesInfo info, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(info.Name)) return Array.Empty<RemoteSearchResult>();
+        var lookupName = MetadataProviderFactory.ResolveLookupName(info.Name, info.Path);
+        if (string.IsNullOrWhiteSpace(lookupName))
+        {
+            _log?.Warn($"TMDB series search skipped because both SeriesInfo.Name and SeriesInfo.Path were empty. Path='{info.Path ?? string.Empty}'");
+            return Array.Empty<RemoteSearchResult>();
+        }
+
         var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
-        var tmdbSearch = await _tmdb.SearchSeriesAsync(info.Name, info.Year, cfg, cancellationToken).ConfigureAwait(false);
+        _log?.Info($"TMDB series search start. Name='{lookupName}', Path='{info.Path ?? string.Empty}', Year={(info.Year.HasValue ? info.Year.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
+        var tmdbSearch = await _tmdb.SearchSeriesAsync(lookupName, info.Year, cfg, cancellationToken).ConfigureAwait(false);
         var results = tmdbSearch?.Results?.Select(x => MetadataProviderFactory.ToTmdbRemoteSearchResult(x, Name, _tmdb.GetImageUrl(x.Poster_Path, "w500"), true)).ToList()
             ?? new List<RemoteSearchResult>();
+        _log?.Info($"TMDB series search finished. Name='{lookupName}', Results={results.Count}");
 
         if (results.Count == 0 && cfg.EnableTvdbFallback && !string.IsNullOrWhiteSpace(cfg.TvdbApiKey))
         {
-            var tvdbSearch = await _tvdb.SearchSeriesAsync(info.Name, cfg, cancellationToken).ConfigureAwait(false);
+            var tvdbSearch = await _tvdb.SearchSeriesAsync(lookupName, cfg, cancellationToken).ConfigureAwait(false);
             if (tvdbSearch?.Data != null)
             {
                 results.AddRange(tvdbSearch.Data.Select(x => MetadataProviderFactory.ToTvdbRemoteSearchResult(x, Name, _tvdb.NormalizeImageUrl(x.ImageUrl))));
+                _log?.Info($"TVDB series fallback search finished. Name='{lookupName}', Results={tvdbSearch.Data.Count}");
             }
         }
 
@@ -400,12 +462,18 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
     {
         var result = new MetadataResult<Series>();
         var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
+        var lookupName = MetadataProviderFactory.ResolveLookupName(info.Name, info.Path);
         var tmdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
+        _log?.Info($"TMDB series metadata start. Name='{lookupName}', Path='{info.Path ?? string.Empty}', ExistingTmdbId='{tmdbId ?? string.Empty}', Year={(info.Year.HasValue ? info.Year.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
         if (string.IsNullOrWhiteSpace(tmdbId))
         {
             var tmdbSearch = await GetSearchResults(info, cancellationToken).ConfigureAwait(false);
             var firstTmdb = tmdbSearch.FirstOrDefault(x => x.ProviderIds.ContainsKey("Tmdb"));
             if (firstTmdb != null) firstTmdb.ProviderIds.TryGetValue("Tmdb", out tmdbId);
+            if (string.IsNullOrWhiteSpace(tmdbId))
+            {
+                _log?.Warn($"TMDB series metadata search did not resolve an id. Name='{lookupName}', Path='{info.Path ?? string.Empty}'");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(tmdbId))
@@ -434,8 +502,11 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
                 result.HasMetadata = true;
                 result.Provider = Name;
                 result.ResultLanguage = cfg.TmdbLanguage;
+                _log?.Info($"TMDB series metadata completed. Name='{lookupName}', TmdbId='{tmdbId}'");
                 return result;
             }
+
+            _log?.Warn($"TMDB series metadata fetch returned null. Name='{lookupName}', TmdbId='{tmdbId}'");
         }
 
         if (cfg.EnableTvdbFallback && !string.IsNullOrWhiteSpace(cfg.TvdbApiKey))
@@ -443,7 +514,7 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
             var tvdbId = info.ProviderIds != null && info.ProviderIds.TryGetValue("Tvdb", out var tvdbProviderId) ? tvdbProviderId : null;
             if (string.IsNullOrWhiteSpace(tvdbId))
             {
-                var search = await _tvdb.SearchSeriesAsync(info.Name ?? string.Empty, cfg, cancellationToken).ConfigureAwait(false);
+                var search = await _tvdb.SearchSeriesAsync(lookupName, cfg, cancellationToken).ConfigureAwait(false);
                 var first = search?.Data?.FirstOrDefault();
                 tvdbId = first?.TvdbId ?? first?.Id;
             }
@@ -466,11 +537,13 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
                     result.HasMetadata = true;
                     result.Provider = Name + " (TVDB fallback)";
                     result.ResultLanguage = cfg.TvdbLanguage;
+                    _log?.Info($"TVDB series metadata completed. Name='{lookupName}', TvdbId='{tvdbId}'");
                     return result;
                 }
             }
         }
 
+        _log?.Warn($"Series metadata lookup finished without a result. Name='{lookupName}', Path='{info.Path ?? string.Empty}'");
         return result;
     }
 
