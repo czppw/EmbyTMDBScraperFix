@@ -2,11 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using EmbyTMDBScraperFix.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Providers;
+using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Services;
 
 namespace EmbyTMDBScraperFix.Controllers;
@@ -87,12 +91,35 @@ public sealed class ResolveFixInternalId : IReturn<object>
     public long Id { get; set; }
 }
 
+[Route("/EmbyTMDBScraperFix/Diagnostics/RefreshItem", "POST", Summary = "Refresh a specific Emby item by internal id")]
+public sealed class RefreshFixItem : IReturn<object>
+{
+    public long Id { get; set; }
+    public bool Recursive { get; set; }
+    public bool ReplaceAllMetadata { get; set; }
+}
+
+[Route("/EmbyTMDBScraperFix/Diagnostics/FillEpisodeNumbersFromPath", "POST", Summary = "Re-parse a specific episode's season and episode numbers from its path")]
+public sealed class FillFixEpisodeNumbersFromPath : IReturn<object>
+{
+    public long Id { get; set; }
+    public bool ForceRefresh { get; set; } = true;
+    public bool Persist { get; set; }
+    public bool RefreshMetadataAfterPersist { get; set; }
+}
+
 public sealed class ItemDiagnosticInfo
 {
+    public long Id { get; set; }
     public string RuntimeType { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
     public string ContainingFolderPath { get; set; } = string.Empty;
+    public string LocationType { get; set; } = string.Empty;
+    public bool? IsLocked { get; set; }
+    public string[] LockedFields { get; set; } = Array.Empty<string>();
+    public string DateCreated { get; set; } = string.Empty;
+    public string DateModified { get; set; } = string.Empty;
     public int? IndexNumber { get; set; }
     public int? ParentIndexNumber { get; set; }
     public int? RecursiveItemCount { get; set; }
@@ -105,10 +132,14 @@ public sealed class ItemDiagnosticInfo
 public sealed class ConfigurationService : IService
 {
     private readonly ILibraryManager _libraryManager;
+    private readonly IProviderManager _providerManager;
+    private readonly IFileSystem _fileSystem;
 
-    public ConfigurationService(ILibraryManager libraryManager)
+    public ConfigurationService(ILibraryManager libraryManager, IProviderManager providerManager, IFileSystem fileSystem)
     {
         _libraryManager = libraryManager;
+        _providerManager = providerManager;
+        _fileSystem = fileSystem;
     }
 
     public object Get(GetFixConfiguration request) => Plugin.Instance?.Configuration ?? new PluginConfiguration();
@@ -217,6 +248,67 @@ public sealed class ConfigurationService : IService
         };
     }
 
+    public async Task<object> Post(RefreshFixItem request)
+    {
+        var item = GetRequiredItem(request.Id);
+        var before = DescribeItem(item);
+
+        var options = CreateRefreshOptions(request.Recursive, request.ReplaceAllMetadata);
+        await _providerManager.RefreshFullItem(item, options, CancellationToken.None).ConfigureAwait(false);
+
+        return new
+        {
+            inputId = request.Id,
+            before,
+            after = DescribeItem(GetRequiredItem(request.Id))
+        };
+    }
+
+    public async Task<object> Post(FillFixEpisodeNumbersFromPath request)
+    {
+        if (request.Id <= 0)
+        {
+            throw new ArgumentException("Id must be greater than 0.");
+        }
+
+        if (GetRequiredItem(request.Id) is not Episode episode)
+        {
+            throw new ArgumentException($"Item {request.Id} is not an episode.");
+        }
+
+        var before = DescribeItem(episode);
+        var updated = _libraryManager.FillMissingEpisodeNumbersFromPath(episode, request.ForceRefresh);
+        var afterParse = DescribeItem(episode);
+
+        ItemDiagnosticInfo? afterPersist = null;
+        if (updated && request.Persist)
+        {
+            await _providerManager.SaveMetadata(episode, ItemUpdateType.MetadataEdit).ConfigureAwait(false);
+
+            if (request.RefreshMetadataAfterPersist)
+            {
+                await _providerManager.RefreshFullItem(
+                    episode,
+                    CreateRefreshOptions(false, false),
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+
+            afterPersist = DescribeItem(GetRequiredItem(request.Id));
+        }
+
+        return new
+        {
+            inputId = request.Id,
+            forceRefresh = request.ForceRefresh,
+            updated,
+            persisted = request.Persist,
+            refreshedMetadata = request.Persist && request.RefreshMetadataAfterPersist,
+            before,
+            afterParse,
+            afterPersist
+        };
+    }
+
     public object Post(UpdateFixConfiguration request)
     {
         var plugin = Plugin.Instance ?? throw new InvalidOperationException("Plugin not initialized.");
@@ -289,10 +381,16 @@ public sealed class ConfigurationService : IService
 
         return new ItemDiagnosticInfo
         {
+            Id = item.Id,
             RuntimeType = item.GetType().FullName ?? string.Empty,
             Name = item.Name ?? string.Empty,
             Path = item.Path ?? string.Empty,
             ContainingFolderPath = item.ContainingFolderPath ?? string.Empty,
+            LocationType = item.LocationType.ToString(),
+            IsLocked = ReadBooleanProperty(item, "IsLocked"),
+            LockedFields = item.LockedFields.Select(x => x.ToString()).ToArray(),
+            DateCreated = item.DateCreated.ToString("O"),
+            DateModified = item.DateModified.ToString("O"),
             IndexNumber = item.IndexNumber,
             ParentIndexNumber = item.ParentIndexNumber,
             RecursiveItemCount = item.RecursiveItemCount,
@@ -301,5 +399,40 @@ public sealed class ConfigurationService : IService
             SeasonSeriesPath = item is Season seasonWithSeries ? seasonWithSeries.Series?.Path : null,
             EpisodeSeriesName = item is Episode episode ? episode.SeriesName : null
         };
+    }
+
+    private BaseItem GetRequiredItem(long id)
+    {
+        var item = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            ItemIds = new[] { id }
+        }).FirstOrDefault();
+
+        return item ?? throw new ArgumentException($"Item {id} was not found.");
+    }
+
+    private MetadataRefreshOptions CreateRefreshOptions(bool recursive, bool replaceAllMetadata)
+    {
+        return new MetadataRefreshOptions(_fileSystem)
+        {
+            MetadataRefreshMode = MetadataRefreshMode.FullRefresh,
+            ImageRefreshMode = MetadataRefreshMode.FullRefresh,
+            ReplaceAllMetadata = replaceAllMetadata,
+            EnableRemoteContentProbe = true,
+            EnableSubtitleDownloading = true,
+            IsAutomated = false,
+            Recursive = recursive
+        };
+    }
+
+    private static bool? ReadBooleanProperty(object instance, string propertyName)
+    {
+        var property = instance.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+        if (property?.PropertyType != typeof(bool) || !property.CanRead)
+        {
+            return null;
+        }
+
+        return (bool)property.GetValue(instance)!;
     }
 }
