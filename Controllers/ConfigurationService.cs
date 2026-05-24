@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using EmbyTMDBScraperFix.Configuration;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Services;
 
@@ -65,6 +68,12 @@ public sealed class GetFixLibraries : IReturn<List<LibraryScanOption>>
 {
 }
 
+[Route("/EmbyTMDBScraperFix/Diagnostics/ResolvePath", "GET", Summary = "Resolve how Emby maps a path to items")]
+public sealed class ResolveFixPath : IReturn<object>
+{
+    public string Path { get; set; } = string.Empty;
+}
+
 public sealed class ConfigurationService : IService
 {
     private readonly ILibraryManager _libraryManager;
@@ -101,6 +110,34 @@ public sealed class ConfigurationService : IService
                 };
             })
             .ToList();
+    }
+
+    public object Get(ResolveFixPath request)
+    {
+        var path = request.Path?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("Path is required.");
+        }
+
+        var normalized = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var parent = Path.GetDirectoryName(normalized);
+        var grandParent = string.IsNullOrWhiteSpace(parent) ? null : Path.GetDirectoryName(parent);
+
+        return new
+        {
+            inputPath = path,
+            existsAsFile = File.Exists(path),
+            existsAsDirectory = Directory.Exists(path),
+            directAuto = DescribeItem(_libraryManager.FindByPath(path, null)),
+            directFile = DescribeItem(_libraryManager.FindByPath(path, false)),
+            directFolder = DescribeItem(_libraryManager.FindByPath(path, true)),
+            normalizedAuto = normalized.Equals(path, StringComparison.Ordinal) ? null : DescribeItem(_libraryManager.FindByPath(normalized, null)),
+            parentAuto = !string.IsNullOrWhiteSpace(parent) ? DescribeItem(_libraryManager.FindByPath(parent, null)) : null,
+            parentFolder = !string.IsNullOrWhiteSpace(parent) ? DescribeItem(_libraryManager.FindByPath(parent, true)) : null,
+            grandParentAuto = !string.IsNullOrWhiteSpace(grandParent) ? DescribeItem(_libraryManager.FindByPath(grandParent, null)) : null,
+            grandParentFolder = !string.IsNullOrWhiteSpace(grandParent) ? DescribeItem(_libraryManager.FindByPath(grandParent, true)) : null
+        };
     }
 
     public object Post(UpdateFixConfiguration request)
@@ -164,5 +201,29 @@ public sealed class ConfigurationService : IService
         };
 
         return await PluginRuntime.Instance.ProxyClient.TestProxyAsync(cfg, default).ConfigureAwait(false);
+    }
+
+    private static object? DescribeItem(BaseItem? item)
+    {
+        if (item == null)
+        {
+            return null;
+        }
+
+        return new
+        {
+            runtimeType = item.GetType().FullName,
+            name = item.Name,
+            path = item.Path,
+            containingFolderPath = item.ContainingFolderPath,
+            indexNumber = item.IndexNumber,
+            parentIndexNumber = item.ParentIndexNumber,
+            recursiveItemCount = item.RecursiveItemCount,
+            providerIds = item.ProviderIds.ToDictionary(x => x.Key, x => x.Value),
+            seasonSeriesName = item is Season season ? season.SeriesName : null,
+            seasonSeriesPath = item is Season seasonWithSeries ? seasonWithSeries.Series?.Path : null,
+            episodeSeriesName = item is Episode episode ? episode.SeriesName : null,
+            episodeSeasonName = item is Episode episodeWithSeason ? episodeWithSeason.SeasonName : null
+        };
     }
 }
