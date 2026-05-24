@@ -222,8 +222,7 @@ public sealed class ConfigurationService : IService
             providerIds = item.ProviderIds.ToDictionary(x => x.Key, x => x.Value),
             seasonSeriesName = item is Season season ? season.SeriesName : null,
             seasonSeriesPath = item is Season seasonWithSeries ? seasonWithSeries.Series?.Path : null,
-            episodeSeriesName = item is Episode episode ? episode.SeriesName : null,
-            episodeSeasonName = item is Episode episodeWithSeason ? episodeWithSeason.SeasonName : null
+            episodeSeriesName = item is Episode episode ? episode.SeriesName : null
         };
     }
 }
