@@ -221,6 +221,12 @@ public sealed class IncrementalScanService : IDisposable
             result.Added.Concat(result.Modified).Distinct(StringComparer.OrdinalIgnoreCase).Take(500),
             StringComparer.OrdinalIgnoreCase);
         var maxAttempts = Math.Max(1, cfg.MaxScrapeRetryCount + 1);
+        if (remaining.Count == 0)
+        {
+            return new List<string>();
+        }
+
+        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
 
         for (var attempt = 1; attempt <= maxAttempts && remaining.Count > 0; attempt++)
         {
@@ -269,7 +275,7 @@ public sealed class IncrementalScanService : IDisposable
 
             if (remaining.Count > 0 && attempt < maxAttempts)
             {
-                await Task.Delay(TimeSpan.FromSeconds(Math.Min(10, 2 * attempt)), cancellationToken).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(Math.Min(20, 5 * attempt)), cancellationToken).ConfigureAwait(false);
             }
         }
 

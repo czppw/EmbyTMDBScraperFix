@@ -100,6 +100,177 @@ internal static class MetadataProviderFactory
             }
         }
     }
+
+    public static void ApplyTmdbPeople(BaseMetadataResult result, TmdbCredits? credits, TmdbApiClient tmdb)
+    {
+        result.ResetPeople();
+        if (credits == null)
+        {
+            return;
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var cast in credits.Cast.OrderBy(x => x.Order).Take(30))
+        {
+            var name = cast.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            var dedupeKey = "cast|" + cast.Id.ToString(CultureInfo.InvariantCulture) + "|" + name + "|" + (cast.Character ?? string.Empty);
+            if (!seen.Add(dedupeKey))
+            {
+                continue;
+            }
+
+            var person = new PersonInfo
+            {
+                Name = name,
+                Role = cast.Character ?? string.Empty,
+                Type = PersonType.Actor,
+                ImageUrl = tmdb.GetImageUrl(cast.Profile_Path, "w300"),
+                ProviderIds = new ProviderIdDictionary()
+            };
+            if (cast.Id > 0)
+            {
+                person.ProviderIds["Tmdb"] = cast.Id.ToString(CultureInfo.InvariantCulture);
+            }
+
+            result.AddPerson(person);
+        }
+
+        foreach (var crew in credits.Crew)
+        {
+            var personType = ToCrewPersonType(crew.Job);
+            if (!personType.HasValue)
+            {
+                continue;
+            }
+
+            var name = crew.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            var dedupeKey = "crew|" + personType.Value + "|" + crew.Id.ToString(CultureInfo.InvariantCulture) + "|" + name;
+            if (!seen.Add(dedupeKey))
+            {
+                continue;
+            }
+
+            var person = new PersonInfo
+            {
+                Name = name,
+                Role = crew.Job ?? string.Empty,
+                Type = personType.Value,
+                ImageUrl = tmdb.GetImageUrl(crew.Profile_Path, "w300"),
+                ProviderIds = new ProviderIdDictionary()
+            };
+            if (crew.Id > 0)
+            {
+                person.ProviderIds["Tmdb"] = crew.Id.ToString(CultureInfo.InvariantCulture);
+            }
+
+            result.AddPerson(person);
+        }
+    }
+
+    public static void MergeMissingTmdbTitleFields(TmdbTitle target, TmdbTitle? fallback)
+    {
+        if (fallback == null)
+        {
+            return;
+        }
+
+        target.Title = PreferNonEmpty(target.Title, fallback.Title);
+        target.Name = PreferNonEmpty(target.Name, fallback.Name);
+        target.Original_Title = PreferNonEmpty(target.Original_Title, fallback.Original_Title);
+        target.Original_Name = PreferNonEmpty(target.Original_Name, fallback.Original_Name);
+        target.Overview = PreferNonEmpty(target.Overview, fallback.Overview);
+        target.Release_Date = PreferNonEmpty(target.Release_Date, fallback.Release_Date);
+        target.First_Air_Date = PreferNonEmpty(target.First_Air_Date, fallback.First_Air_Date);
+        target.Air_Date = PreferNonEmpty(target.Air_Date, fallback.Air_Date);
+        target.Poster_Path = PreferNonEmpty(target.Poster_Path, fallback.Poster_Path);
+        target.Backdrop_Path = PreferNonEmpty(target.Backdrop_Path, fallback.Backdrop_Path);
+
+        if (target.Runtime == null)
+        {
+            target.Runtime = fallback.Runtime;
+        }
+
+        if (target.Genres.Count == 0 && fallback.Genres.Count > 0)
+        {
+            target.Genres = fallback.Genres;
+        }
+
+        if ((target.Credits == null || (target.Credits.Cast.Count == 0 && target.Credits.Crew.Count == 0)) && fallback.Credits != null)
+        {
+            target.Credits = fallback.Credits;
+        }
+    }
+
+    public static void MergeMissingTmdbPersonFields(TmdbPerson target, TmdbPerson? fallback)
+    {
+        if (fallback == null)
+        {
+            return;
+        }
+
+        target.Name = PreferNonEmpty(target.Name, fallback.Name);
+        target.Biography = PreferNonEmpty(target.Biography, fallback.Biography);
+        target.Birthday = PreferNonEmpty(target.Birthday, fallback.Birthday);
+        target.Profile_Path = PreferNonEmpty(target.Profile_Path, fallback.Profile_Path);
+    }
+
+    public static string? PreferNonEmpty(string? primary, string? fallback)
+        => string.IsNullOrWhiteSpace(primary) ? fallback : primary;
+
+    private static PersonType? ToCrewPersonType(string? job)
+    {
+        if (string.IsNullOrWhiteSpace(job))
+        {
+            return null;
+        }
+
+        if (job.Equals("Director", StringComparison.OrdinalIgnoreCase))
+        {
+            return PersonType.Director;
+        }
+
+        if (job.Equals("Writer", StringComparison.OrdinalIgnoreCase)
+            || job.Equals("Screenplay", StringComparison.OrdinalIgnoreCase)
+            || job.Equals("Story", StringComparison.OrdinalIgnoreCase))
+        {
+            return PersonType.Writer;
+        }
+
+        if (job.Equals("Producer", StringComparison.OrdinalIgnoreCase)
+            || job.Equals("Executive Producer", StringComparison.OrdinalIgnoreCase))
+        {
+            return PersonType.Producer;
+        }
+
+        if (job.Equals("Original Music Composer", StringComparison.OrdinalIgnoreCase)
+            || job.Equals("Composer", StringComparison.OrdinalIgnoreCase))
+        {
+            return PersonType.Composer;
+        }
+
+        if (job.Equals("Conductor", StringComparison.OrdinalIgnoreCase))
+        {
+            return PersonType.Conductor;
+        }
+
+        if (job.Equals("Lyricist", StringComparison.OrdinalIgnoreCase))
+        {
+            return PersonType.Lyricist;
+        }
+
+        return null;
+    }
 }
 
 public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<Movie, MovieInfo>, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
@@ -148,6 +319,12 @@ public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<Movie, M
         }
 
         if (data == null) return result;
+        if (string.IsNullOrWhiteSpace(data.Overview) || (data.Credits?.Cast.Count ?? 0) == 0)
+        {
+            var fallback = await _tmdb.GetMovieAsync(tmdbId, cfg, cancellationToken, omitConfiguredLanguage: true).ConfigureAwait(false);
+            MetadataProviderFactory.MergeMissingTmdbTitleFields(data, fallback);
+        }
+
         var item = new Movie
         {
             Name = data.Title ?? data.Original_Title ?? info.Name,
@@ -159,6 +336,7 @@ public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<Movie, M
         item.ProviderIds["Tmdb"] = data.Id.ToString(CultureInfo.InvariantCulture);
         foreach (var genre in data.Genres.Where(g => !string.IsNullOrWhiteSpace(g.Name))) item.AddGenre(genre.Name!);
         result.Item = item;
+        MetadataProviderFactory.ApplyTmdbPeople(result, data.Credits, _tmdb);
         result.HasMetadata = true;
         result.Provider = Name;
         result.ResultLanguage = cfg.TmdbLanguage;
@@ -235,6 +413,12 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
             var data = await _tmdb.GetSeriesAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
+                if (string.IsNullOrWhiteSpace(data.Overview) || (data.Credits?.Cast.Count ?? 0) == 0)
+                {
+                    var fallback = await _tmdb.GetSeriesAsync(tmdbId, cfg, cancellationToken, omitConfiguredLanguage: true).ConfigureAwait(false);
+                    MetadataProviderFactory.MergeMissingTmdbTitleFields(data, fallback);
+                }
+
                 var item = new Series
                 {
                     Name = data.Name ?? data.Original_Name ?? info.Name,
@@ -246,6 +430,7 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
                 item.ProviderIds["Tmdb"] = data.Id.ToString(CultureInfo.InvariantCulture);
                 foreach (var genre in data.Genres.Where(g => !string.IsNullOrWhiteSpace(g.Name))) item.AddGenre(genre.Name!);
                 result.Item = item;
+                MetadataProviderFactory.ApplyTmdbPeople(result, data.Credits, _tmdb);
                 result.HasMetadata = true;
                 result.Provider = Name;
                 result.ResultLanguage = cfg.TmdbLanguage;
@@ -616,6 +801,12 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
             var data = await _tmdb.GetPersonAsync(safeTmdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
+                if (string.IsNullOrWhiteSpace(data.Biography))
+                {
+                    var fallback = await _tmdb.GetPersonAsync(safeTmdbId, cfg, cancellationToken, omitConfiguredLanguage: true).ConfigureAwait(false);
+                    MetadataProviderFactory.MergeMissingTmdbPersonFields(data, fallback);
+                }
+
                 var item = new Person
                 {
                     Name = data.Name ?? info.Name,

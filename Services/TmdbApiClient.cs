@@ -54,20 +54,20 @@ public sealed class TmdbApiClient
         return GetJsonAsync<TmdbSearchResponse>("/search/person", query, cfg, ct);
     }
 
-    public Task<TmdbTitle?> GetMovieAsync(string id, PluginConfiguration cfg, CancellationToken ct)
-        => GetJsonAsync<TmdbTitle>($"/movie/{id}", new Dictionary<string, string> { ["append_to_response"] = "credits,images" }, cfg, ct);
+    public Task<TmdbTitle?> GetMovieAsync(string id, PluginConfiguration cfg, CancellationToken ct, bool omitConfiguredLanguage = false)
+        => GetJsonAsync<TmdbTitle>($"/movie/{id}", new Dictionary<string, string> { ["append_to_response"] = "credits,images" }, cfg, ct, omitConfiguredLanguage: omitConfiguredLanguage);
 
-    public Task<TmdbTitle?> GetSeriesAsync(string id, PluginConfiguration cfg, CancellationToken ct)
-        => GetJsonAsync<TmdbTitle>($"/tv/{id}", new Dictionary<string, string> { ["append_to_response"] = "credits,images" }, cfg, ct);
+    public Task<TmdbTitle?> GetSeriesAsync(string id, PluginConfiguration cfg, CancellationToken ct, bool omitConfiguredLanguage = false)
+        => GetJsonAsync<TmdbTitle>($"/tv/{id}", new Dictionary<string, string> { ["append_to_response"] = "credits,images" }, cfg, ct, omitConfiguredLanguage: omitConfiguredLanguage);
 
-    public Task<TmdbTitle?> GetSeasonAsync(string seriesId, int seasonNumber, PluginConfiguration cfg, CancellationToken ct)
-        => GetJsonAsync<TmdbTitle>($"/tv/{seriesId}/season/{seasonNumber}", new Dictionary<string, string>(), cfg, ct);
+    public Task<TmdbTitle?> GetSeasonAsync(string seriesId, int seasonNumber, PluginConfiguration cfg, CancellationToken ct, bool omitConfiguredLanguage = false)
+        => GetJsonAsync<TmdbTitle>($"/tv/{seriesId}/season/{seasonNumber}", new Dictionary<string, string>(), cfg, ct, omitConfiguredLanguage: omitConfiguredLanguage);
 
-    public Task<TmdbTitle?> GetEpisodeAsync(string seriesId, int season, int episode, PluginConfiguration cfg, CancellationToken ct)
-        => GetJsonAsync<TmdbTitle>($"/tv/{seriesId}/season/{season}/episode/{episode}", new Dictionary<string, string>(), cfg, ct);
+    public Task<TmdbTitle?> GetEpisodeAsync(string seriesId, int season, int episode, PluginConfiguration cfg, CancellationToken ct, bool omitConfiguredLanguage = false)
+        => GetJsonAsync<TmdbTitle>($"/tv/{seriesId}/season/{season}/episode/{episode}", new Dictionary<string, string>(), cfg, ct, omitConfiguredLanguage: omitConfiguredLanguage);
 
-    public Task<TmdbPerson?> GetPersonAsync(string id, PluginConfiguration cfg, CancellationToken ct)
-        => GetJsonAsync<TmdbPerson>($"/person/{id}", new Dictionary<string, string>(), cfg, ct);
+    public Task<TmdbPerson?> GetPersonAsync(string id, PluginConfiguration cfg, CancellationToken ct, bool omitConfiguredLanguage = false)
+        => GetJsonAsync<TmdbPerson>($"/person/{id}", new Dictionary<string, string>(), cfg, ct, omitConfiguredLanguage: omitConfiguredLanguage);
 
     public string GetImageUrl(string? path, string size = "original")
         => string.IsNullOrWhiteSpace(path) ? string.Empty : $"https://image.tmdb.org/t/p/{size}{path}";
@@ -78,7 +78,7 @@ public sealed class TmdbApiClient
         return string.IsNullOrWhiteSpace(cfg.TmdbApiBaseUrl) ? TmdbUrlHelper.SystemDefaultApiBaseUrl + "/3" : configured;
     }
 
-    private async Task<T?> GetJsonAsync<T>(string path, IDictionary<string, string> query, PluginConfiguration cfg, CancellationToken ct)
+    private async Task<T?> GetJsonAsync<T>(string path, IDictionary<string, string> query, PluginConfiguration cfg, CancellationToken ct, bool omitConfiguredLanguage = false)
     {
         if (string.IsNullOrWhiteSpace(cfg.TmdbApiKey))
         {
@@ -87,7 +87,10 @@ public sealed class TmdbApiClient
         }
 
         query["api_key"] = cfg.TmdbApiKey;
-        query["language"] = string.IsNullOrWhiteSpace(cfg.TmdbLanguage) ? "zh-CN" : cfg.TmdbLanguage;
+        if (!omitConfiguredLanguage)
+        {
+            query["language"] = string.IsNullOrWhiteSpace(cfg.TmdbLanguage) ? "zh-CN" : cfg.TmdbLanguage;
+        }
         if (!string.IsNullOrWhiteSpace(cfg.TmdbRegion)) query["region"] = cfg.TmdbRegion;
 
         var url = BuildBaseUrl(cfg) + path + "?" + BuildQuery(query);
@@ -211,6 +214,9 @@ public sealed class TmdbTitle
 
     [JsonPropertyName("credits")]
     public TmdbCredits? Credits { get; set; }
+
+    [JsonPropertyName("images")]
+    public TmdbImages? Images { get; set; }
 }
 
 public sealed class TmdbPerson
@@ -248,6 +254,9 @@ public sealed class TmdbCredits
 
 public sealed class TmdbCast
 {
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
     [JsonPropertyName("name")]
     public string? Name { get; set; }
 
@@ -256,13 +265,37 @@ public sealed class TmdbCast
 
     [JsonPropertyName("order")]
     public int Order { get; set; }
+
+    [JsonPropertyName("profile_path")]
+    public string? Profile_Path { get; set; }
 }
 
 public sealed class TmdbCrew
 {
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
     [JsonPropertyName("name")]
     public string? Name { get; set; }
 
     [JsonPropertyName("job")]
     public string? Job { get; set; }
+
+    [JsonPropertyName("profile_path")]
+    public string? Profile_Path { get; set; }
+}
+
+public sealed class TmdbImages
+{
+    [JsonPropertyName("posters")]
+    public List<TmdbImage> Posters { get; set; } = new();
+
+    [JsonPropertyName("backdrops")]
+    public List<TmdbImage> Backdrops { get; set; } = new();
+}
+
+public sealed class TmdbImage
+{
+    [JsonPropertyName("file_path")]
+    public string? File_Path { get; set; }
 }
