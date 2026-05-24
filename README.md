@@ -43,13 +43,6 @@
 3. 复制到 Emby 插件目录
 4. 重启 Emby Server
 
-### 方式二：从 GitHub Actions 下载构建产物
-
-1. 打开 [Actions](https://github.com/czppw/EmbyTMDBScraperFix/actions/workflows/build.yml)
-2. 进入最新一次成功构建
-3. 下载产物 `EmbyTMDBScraperFix`
-4. 解压并取出 `EmbyTMDBScraperFix.dll`
-
 ### Docker / Linux 部署
 
 常见插件目录示例：
