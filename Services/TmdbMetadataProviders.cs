@@ -46,6 +46,14 @@ internal static class MetadataProviderFactory
         throw new InvalidOperationException("EmbyTMDBScraperFix runtime is not initialized yet.");
     }
 
+    public static void LogImageProviderEvent(string providerName, string message)
+    {
+        if (PluginRuntime.TryGetInstance(out var runtime))
+        {
+            runtime.Log.Info($"[{providerName}] {message}");
+        }
+    }
+
     public static RemoteSearchResult ToTmdbRemoteSearchResult(TmdbSearchItem item, string providerName, string? imageUrl, bool isSeries)
     {
         var date = isSeries ? item.First_Air_Date : item.Release_Date;
@@ -400,15 +408,32 @@ public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<Movie, M
     {
         var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
         var tmdbId = item.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
-        if (string.IsNullOrWhiteSpace(tmdbId)) return Array.Empty<RemoteImageInfo>();
+        if (string.IsNullOrWhiteSpace(tmdbId))
+        {
+            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages skipped for movie '{item.Name ?? string.Empty}' because Tmdb provider id was empty.");
+            return Array.Empty<RemoteImageInfo>();
+        }
+
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages start for movie '{item.Name ?? string.Empty}'. TmdbId='{tmdbId}'.");
         var data = await _tmdb.GetMovieAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
-        if (data == null) return Array.Empty<RemoteImageInfo>();
-        return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+        if (data == null)
+        {
+            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages returned no TMDB payload for movie '{item.Name ?? string.Empty}'. TmdbId='{tmdbId}'.");
+            return Array.Empty<RemoteImageInfo>();
+        }
+
+        var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
             (_tmdb.GetImageUrl(data.Poster_Path), _tmdb.GetImageUrl(data.Poster_Path, "w500"), ImageType.Primary),
             (_tmdb.GetImageUrl(data.Backdrop_Path), _tmdb.GetImageUrl(data.Backdrop_Path, "w780"), ImageType.Backdrop)).ToArray();
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for movie '{item.Name ?? string.Empty}'. Count={images.Length}.");
+        return images;
     }
 
-    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken) => MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken)
+    {
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImageResponse requested: {url}");
+        return MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    }
 }
 
 public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series, SeriesInfo>, ISeriesMetadataProvider, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
@@ -562,31 +587,42 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
         var tmdbId = item.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
         if (!string.IsNullOrWhiteSpace(tmdbId))
         {
+            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages start for series '{item.Name ?? string.Empty}'. TmdbId='{tmdbId}'.");
             var data = await _tmdb.GetSeriesAsync(tmdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
-                return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
                     (_tmdb.GetImageUrl(data.Poster_Path), _tmdb.GetImageUrl(data.Poster_Path, "w500"), ImageType.Primary),
                     (_tmdb.GetImageUrl(data.Backdrop_Path), _tmdb.GetImageUrl(data.Backdrop_Path, "w780"), ImageType.Backdrop)).ToArray();
+                MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for series '{item.Name ?? string.Empty}'. Count={images.Length}.");
+                return images;
             }
         }
 
         var tvdbId = item.ProviderIds.TryGetValue("Tvdb", out var tvdbProviderId) ? tvdbProviderId : null;
         if (!string.IsNullOrWhiteSpace(tvdbId) && cfg.EnableTvdbFallback)
         {
+            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages falling back to TVDB for series '{item.Name ?? string.Empty}'. TvdbId='{tvdbId}'.");
             var safeTvdbId = tvdbId;
             var data = await _tvdb.GetSeriesAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data?.Data != null)
             {
-                return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
                     (_tvdb.NormalizeImageUrl(data.Data.Image), _tvdb.NormalizeImageUrl(data.Data.Image), ImageType.Primary)).ToArray();
+                MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for series '{item.Name ?? string.Empty}' via TVDB. Count={images.Length}.");
+                return images;
             }
         }
 
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages returned no images for series '{item.Name ?? string.Empty}'.");
         return Array.Empty<RemoteImageInfo>();
     }
 
-    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken) => MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken)
+    {
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImageResponse requested: {url}");
+        return MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    }
 }
 
 public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season, SeasonInfo>, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
@@ -700,12 +736,15 @@ public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season,
             var tmdbSeriesId = seasonItem.Series?.ProviderIds.TryGetValue("Tmdb", out var sid) == true ? sid : null;
             if (!string.IsNullOrWhiteSpace(tmdbSeriesId))
             {
+                MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages start for season '{item.Name ?? string.Empty}'. SeriesTmdbId='{tmdbSeriesId}', Season={seasonItem.IndexNumber.Value}.");
                 var safeTmdbSeriesId = tmdbSeriesId;
                 var data = await _tmdb.GetSeasonAsync(safeTmdbSeriesId, seasonItem.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
                 if (data != null)
                 {
-                    return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+                    var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
                         (_tmdb.GetImageUrl(data.Poster_Path), _tmdb.GetImageUrl(data.Poster_Path, "w500"), ImageType.Primary)).ToArray();
+                    MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for season '{item.Name ?? string.Empty}'. Count={images.Length}.");
+                    return images;
                 }
             }
         }
@@ -713,22 +752,30 @@ public sealed class TmdbSeasonMetadataProvider : IRemoteMetadataProvider<Season,
         var tvdbId = item.ProviderIds.TryGetValue("Tvdb", out var tvdbProviderId) ? tvdbProviderId : null;
         if (!string.IsNullOrWhiteSpace(tvdbId) && cfg.EnableTvdbFallback)
         {
+            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages falling back to TVDB for season '{item.Name ?? string.Empty}'. TvdbId='{tvdbId}'.");
             var safeTvdbId = tvdbId;
             var season = await _tvdb.GetSeasonAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (season?.Data != null)
             {
-                return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
                     (_tvdb.NormalizeImageUrl(season.Data.Image), _tvdb.NormalizeImageUrl(season.Data.Image), ImageType.Primary)).ToArray();
+                MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for season '{item.Name ?? string.Empty}' via TVDB. Count={images.Length}.");
+                return images;
             }
         }
 
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages returned no images for season '{item.Name ?? string.Empty}'.");
         return Array.Empty<RemoteImageInfo>();
     }
 
-    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken) => MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken)
+    {
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImageResponse requested: {url}");
+        return MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    }
 }
 
-public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episode, EpisodeInfo>, IHasOrder, IHasSupportedExternalIdentifiers
+public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episode, EpisodeInfo>, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
 {
     private readonly TmdbApiClient _tmdb;
     private readonly TvdbApiClient _tvdb;
@@ -742,6 +789,7 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
     public string Name => "EmbyTMDBScraperFix TMDB Episode";
     public int Order => 0;
     public string[] GetSupportedExternalIdentifiers() => new[] { "Tmdb", "Tvdb" };
+    public bool Supports(BaseItem item) => item is Episode;
 
     public Task<IEnumerable<RemoteSearchResult>> GetSearchResults(EpisodeInfo info, CancellationToken cancellationToken)
     {
@@ -824,7 +872,40 @@ public sealed class TmdbEpisodeMetadataProvider : IRemoteMetadataProvider<Episod
         return result;
     }
 
-    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken) => MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    public IEnumerable<ImageType> GetSupportedImages(BaseItem item) => new[] { ImageType.Primary };
+
+    public async Task<IEnumerable<RemoteImageInfo>> GetImages(BaseItem item, LibraryOptions libraryOptions, CancellationToken cancellationToken)
+    {
+        var cfg = Plugin.Instance?.Configuration ?? new PluginConfiguration();
+        if (item is not Episode episodeItem)
+        {
+            MetadataProviderFactory.LogImageProviderEvent(Name, "GetImages skipped because the item was not an episode.");
+            return Array.Empty<RemoteImageInfo>();
+        }
+
+        var tmdbSeriesId = episodeItem.Series?.ProviderIds.TryGetValue("Tmdb", out var sid) == true ? sid : null;
+        if (!string.IsNullOrWhiteSpace(tmdbSeriesId) && episodeItem.ParentIndexNumber.HasValue && episodeItem.IndexNumber.HasValue)
+        {
+            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages start for episode '{item.Name ?? string.Empty}'. SeriesTmdbId='{tmdbSeriesId}', Season={episodeItem.ParentIndexNumber.Value}, Episode={episodeItem.IndexNumber.Value}.");
+            var data = await _tmdb.GetEpisodeAsync(tmdbSeriesId, episodeItem.ParentIndexNumber.Value, episodeItem.IndexNumber.Value, cfg, cancellationToken).ConfigureAwait(false);
+            if (data != null)
+            {
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+                    (_tmdb.GetImageUrl(data.Still_Path, "original"), _tmdb.GetImageUrl(data.Still_Path, "w780"), ImageType.Primary)).ToArray();
+                MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for episode '{item.Name ?? string.Empty}'. Count={images.Length}.");
+                return images;
+            }
+        }
+
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages returned no images for episode '{item.Name ?? string.Empty}'. ParentIndex={episodeItem.ParentIndexNumber?.ToString() ?? "null"}, Index={episodeItem.IndexNumber?.ToString() ?? "null"}.");
+        return Array.Empty<RemoteImageInfo>();
+    }
+
+    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken)
+    {
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImageResponse requested: {url}");
+        return MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    }
 }
 
 public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person, PersonLookupInfo>, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
@@ -945,29 +1026,40 @@ public sealed class TmdbPersonMetadataProvider : IRemoteMetadataProvider<Person,
         var tmdbId = item.ProviderIds.TryGetValue("Tmdb", out var id) ? id : null;
         if (!string.IsNullOrWhiteSpace(tmdbId))
         {
+            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages start for person '{item.Name ?? string.Empty}'. TmdbId='{tmdbId}'.");
             var safeTmdbId = tmdbId;
             var data = await _tmdb.GetPersonAsync(safeTmdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (data != null)
             {
-                return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TmdbLanguage,
                     (_tmdb.GetImageUrl(data.Profile_Path), _tmdb.GetImageUrl(data.Profile_Path, "w500"), ImageType.Primary)).ToArray();
+                MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for person '{item.Name ?? string.Empty}'. Count={images.Length}.");
+                return images;
             }
         }
 
         var tvdbId = item.ProviderIds.TryGetValue("Tvdb", out var tvdbProviderId) ? tvdbProviderId : null;
         if (!string.IsNullOrWhiteSpace(tvdbId) && cfg.EnableTvdbFallback)
         {
+            MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages falling back to TVDB for person '{item.Name ?? string.Empty}'. TvdbId='{tvdbId}'.");
             var safeTvdbId = tvdbId;
             var person = await _tvdb.GetPersonAsync(safeTvdbId, cfg, cancellationToken).ConfigureAwait(false);
             if (person?.Data != null)
             {
-                return MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
+                var images = MetadataProviderFactory.BuildRemoteImages(Name, cfg.TvdbLanguage,
                     (_tvdb.NormalizeImageUrl(person.Data.Image), _tvdb.NormalizeImageUrl(person.Data.Image), ImageType.Primary)).ToArray();
+                MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages finished for person '{item.Name ?? string.Empty}' via TVDB. Count={images.Length}.");
+                return images;
             }
         }
 
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImages returned no images for person '{item.Name ?? string.Empty}'.");
         return Array.Empty<RemoteImageInfo>();
     }
 
-    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken) => MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken)
+    {
+        MetadataProviderFactory.LogImageProviderEvent(Name, $"GetImageResponse requested: {url}");
+        return MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
+    }
 }

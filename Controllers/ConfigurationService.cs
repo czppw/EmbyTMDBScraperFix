@@ -6,11 +6,14 @@ using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbyTMDBScraperFix.Configuration;
+using MediaBrowser.Model.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
+using MediaBrowser.Model.Providers;
 using MediaBrowser.Model.Services;
 
 namespace EmbyTMDBScraperFix.Controllers;
@@ -91,6 +94,16 @@ public sealed class ResolveFixInternalId : IReturn<object>
     public long Id { get; set; }
 }
 
+[Route("/EmbyTMDBScraperFix/Diagnostics/RemoteImages", "GET", Summary = "Inspect remote image providers and images for an item")]
+public sealed class GetFixRemoteImages : IReturn<object>
+{
+    public long Id { get; set; }
+    public string ImageType { get; set; } = string.Empty;
+    public string ProviderName { get; set; } = string.Empty;
+    public bool IncludeAllLanguages { get; set; }
+    public bool IncludeDisabledProviders { get; set; }
+}
+
 [Route("/EmbyTMDBScraperFix/Diagnostics/RefreshItem", "POST", Summary = "Refresh a specific Emby item by internal id")]
 public sealed class RefreshFixItem : IReturn<object>
 {
@@ -128,6 +141,26 @@ public sealed class ItemDiagnosticInfo
     public string? SeasonSeriesName { get; set; }
     public string? SeasonSeriesPath { get; set; }
     public string? EpisodeSeriesName { get; set; }
+}
+
+public sealed class LibraryOptionsDiagnosticInfo
+{
+    public string LibraryName { get; set; } = string.Empty;
+    public string CollectionType { get; set; } = string.Empty;
+    public string[] Locations { get; set; } = Array.Empty<string>();
+    public string PreferredMetadataLanguage { get; set; } = string.Empty;
+    public string PreferredImageLanguage { get; set; } = string.Empty;
+    public bool DownloadImagesInAdvance { get; set; }
+    public TypeOptionsDiagnosticInfo[] MatchedTypeOptions { get; set; } = Array.Empty<TypeOptionsDiagnosticInfo>();
+}
+
+public sealed class TypeOptionsDiagnosticInfo
+{
+    public string Type { get; set; } = string.Empty;
+    public string[] MetadataFetchers { get; set; } = Array.Empty<string>();
+    public string[] MetadataFetcherOrder { get; set; } = Array.Empty<string>();
+    public string[] ImageFetchers { get; set; } = Array.Empty<string>();
+    public string[] ImageFetcherOrder { get; set; } = Array.Empty<string>();
 }
 
 public sealed class ConfigurationService : IService
@@ -246,6 +279,50 @@ public sealed class ConfigurationService : IService
         {
             inputId = request.Id,
             item = DescribeItem(item)
+        };
+    }
+
+    public async Task<object> Get(GetFixRemoteImages request)
+    {
+        if (request.Id <= 0)
+        {
+            throw new ArgumentException("Id must be greater than 0.");
+        }
+
+        var item = GetRequiredItem(request.Id);
+        var library = ResolveLibraryOptions(item);
+        var query = new RemoteImageQuery
+        {
+            IncludeAllLanguages = request.IncludeAllLanguages,
+            IncludeDisabledProviders = request.IncludeDisabledProviders,
+            ProviderName = string.IsNullOrWhiteSpace(request.ProviderName) ? null : request.ProviderName.Trim()
+        };
+
+        if (Enum.TryParse<ImageType>(request.ImageType, true, out var imageType))
+        {
+            query.ImageType = imageType;
+        }
+
+        var providerInfo = _providerManager.GetRemoteImageProviderInfo(item, library.Options)
+            .Select(x => x.Name)
+            .ToArray();
+        var images = await _providerManager.GetAvailableRemoteImages(item, library.Options, query, CancellationToken.None).ConfigureAwait(false);
+
+        return new
+        {
+            inputId = request.Id,
+            item = DescribeItem(item),
+            query = new
+            {
+                request.ImageType,
+                parsedImageType = query.ImageType?.ToString(),
+                providerName = query.ProviderName ?? string.Empty,
+                request.IncludeAllLanguages,
+                request.IncludeDisabledProviders
+            },
+            library = DescribeLibraryOptions(library.Folder, library.Options, item),
+            providers = providerInfo,
+            remoteImageResult = images
         };
     }
 
@@ -411,6 +488,66 @@ public sealed class ConfigurationService : IService
         }).FirstOrDefault();
 
         return item ?? throw new ArgumentException($"Item {id} was not found.");
+    }
+
+    private (VirtualFolderInfo? Folder, LibraryOptions Options) ResolveLibraryOptions(BaseItem item)
+    {
+        var pathCandidates = new[]
+        {
+            item.Path,
+            item.ContainingFolderPath
+        }.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+        var folder = _libraryManager.GetVirtualFolders()
+            .SelectMany(x => (x.Locations ?? Array.Empty<string>()).Select(location => new { Folder = x, Location = location ?? string.Empty }))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Location) && pathCandidates.Any(path => IsPathWithin(path!, x.Location)))
+            .OrderByDescending(x => x.Location.Length)
+            .Select(x => x.Folder)
+            .FirstOrDefault();
+
+        return (folder, folder?.LibraryOptions ?? new LibraryOptions());
+    }
+
+    private static bool IsPathWithin(string path, string root)
+    {
+        var normalizedPath = NormalizePath(path);
+        var normalizedRoot = NormalizePath(root);
+        return normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path)
+        => path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+    private static LibraryOptionsDiagnosticInfo DescribeLibraryOptions(VirtualFolderInfo? folder, LibraryOptions options, BaseItem item)
+    {
+        var typeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var current = item.GetType(); current != null && current != typeof(object); current = current.BaseType)
+        {
+            typeNames.Add(current.Name);
+        }
+
+        var matchedTypeOptions = (options.TypeOptions ?? Array.Empty<TypeOptions>())
+            .Where(x => !string.IsNullOrWhiteSpace(x.Type) && typeNames.Contains(x.Type))
+            .Select(x => new TypeOptionsDiagnosticInfo
+            {
+                Type = x.Type ?? string.Empty,
+                MetadataFetchers = x.MetadataFetchers ?? Array.Empty<string>(),
+                MetadataFetcherOrder = x.MetadataFetcherOrder ?? Array.Empty<string>(),
+                ImageFetchers = x.ImageFetchers ?? Array.Empty<string>(),
+                ImageFetcherOrder = x.ImageFetcherOrder ?? Array.Empty<string>()
+            })
+            .ToArray();
+
+        return new LibraryOptionsDiagnosticInfo
+        {
+            LibraryName = folder?.Name ?? string.Empty,
+            CollectionType = folder?.CollectionType ?? string.Empty,
+            Locations = folder?.Locations ?? Array.Empty<string>(),
+            PreferredMetadataLanguage = options.PreferredMetadataLanguage ?? string.Empty,
+            PreferredImageLanguage = options.PreferredImageLanguage ?? string.Empty,
+            DownloadImagesInAdvance = options.DownloadImagesInAdvance,
+            MatchedTypeOptions = matchedTypeOptions
+        };
     }
 
     private MetadataRefreshOptions CreateRefreshOptions(bool recursive, bool replaceAllMetadata)

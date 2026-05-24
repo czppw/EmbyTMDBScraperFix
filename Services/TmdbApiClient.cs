@@ -543,6 +543,9 @@ public sealed class TmdbTitle
     [JsonPropertyName("backdrop_path")]
     public string? Backdrop_Path { get; set; }
 
+    [JsonPropertyName("still_path")]
+    public string? Still_Path { get; set; }
+
     [JsonPropertyName("vote_average")]
     public double Vote_Average { get; set; }
 
