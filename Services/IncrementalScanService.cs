@@ -235,7 +235,11 @@ public sealed class IncrementalScanService : IDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    var item = _libraryManager.FindByPath(file, false) ?? _libraryManager.FindByPath(Path.GetDirectoryName(file) ?? file, false);
+                    var directoryPath = Path.GetDirectoryName(file);
+                    var parentDirectoryPath = string.IsNullOrWhiteSpace(directoryPath) ? null : Path.GetDirectoryName(directoryPath);
+                    var item = _libraryManager.FindByPath(file, false)
+                        ?? (!string.IsNullOrWhiteSpace(directoryPath) ? _libraryManager.FindByPath(directoryPath, true) : null)
+                        ?? (!string.IsNullOrWhiteSpace(parentDirectoryPath) ? _libraryManager.FindByPath(parentDirectoryPath, true) : null);
                     if (item == null)
                     {
                         if (attempt == maxAttempts)

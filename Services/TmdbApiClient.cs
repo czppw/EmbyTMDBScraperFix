@@ -22,36 +22,44 @@ public sealed class TmdbApiClient
         _log = log;
     }
 
-    public Task<TmdbSearchResponse?> SearchMovieAsync(string name, int? year, PluginConfiguration cfg, CancellationToken ct)
+    public async Task<TmdbSearchResponse?> SearchMovieAsync(string name, int? year, PluginConfiguration cfg, CancellationToken ct)
     {
         var query = new Dictionary<string, string>
         {
             ["query"] = name,
             ["include_adult"] = cfg.EnableAdultMetadata ? "true" : "false"
         };
-        if (year.HasValue) query["year"] = year.Value.ToString(CultureInfo.InvariantCulture);
-        return GetJsonAsync<TmdbSearchResponse>("/search/movie", query, cfg, ct);
+        if (year.HasValue)
+        {
+            query["year"] = year.Value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return await SearchWithFallbackAsync("/search/movie", query, cfg, ct, hasYearConstraint: year.HasValue, yearKey: "year").ConfigureAwait(false);
     }
 
-    public Task<TmdbSearchResponse?> SearchSeriesAsync(string name, int? year, PluginConfiguration cfg, CancellationToken ct)
+    public async Task<TmdbSearchResponse?> SearchSeriesAsync(string name, int? year, PluginConfiguration cfg, CancellationToken ct)
     {
         var query = new Dictionary<string, string>
         {
             ["query"] = name,
             ["include_adult"] = cfg.EnableAdultMetadata ? "true" : "false"
         };
-        if (year.HasValue) query["first_air_date_year"] = year.Value.ToString(CultureInfo.InvariantCulture);
-        return GetJsonAsync<TmdbSearchResponse>("/search/tv", query, cfg, ct);
+        if (year.HasValue)
+        {
+            query["first_air_date_year"] = year.Value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return await SearchWithFallbackAsync("/search/tv", query, cfg, ct, hasYearConstraint: year.HasValue, yearKey: "first_air_date_year").ConfigureAwait(false);
     }
 
-    public Task<TmdbSearchResponse?> SearchPersonAsync(string name, PluginConfiguration cfg, CancellationToken ct)
+    public async Task<TmdbSearchResponse?> SearchPersonAsync(string name, PluginConfiguration cfg, CancellationToken ct)
     {
         var query = new Dictionary<string, string>
         {
             ["query"] = name,
             ["include_adult"] = cfg.EnableAdultMetadata ? "true" : "false"
         };
-        return GetJsonAsync<TmdbSearchResponse>("/search/person", query, cfg, ct);
+        return await SearchWithFallbackAsync("/search/person", query, cfg, ct, hasYearConstraint: false, yearKey: string.Empty).ConfigureAwait(false);
     }
 
     public Task<TmdbTitle?> GetMovieAsync(string id, PluginConfiguration cfg, CancellationToken ct, bool omitConfiguredLanguage = false)
@@ -77,6 +85,47 @@ public sealed class TmdbApiClient
         var configured = TmdbUrlHelper.ResolveApiBaseUrl(cfg.TmdbApiBaseUrl);
         return string.IsNullOrWhiteSpace(cfg.TmdbApiBaseUrl) ? TmdbUrlHelper.SystemDefaultApiBaseUrl + "/3" : configured;
     }
+
+    private async Task<TmdbSearchResponse?> SearchWithFallbackAsync(string path, Dictionary<string, string> query, PluginConfiguration cfg, CancellationToken ct, bool hasYearConstraint, string yearKey)
+    {
+        var response = await GetJsonAsync<TmdbSearchResponse>(path, query, cfg, ct).ConfigureAwait(false);
+        if (HasSearchResults(response))
+        {
+            return response;
+        }
+
+        if (hasYearConstraint && !string.IsNullOrWhiteSpace(yearKey))
+        {
+            var withoutYear = new Dictionary<string, string>(query, StringComparer.Ordinal);
+            withoutYear.Remove(yearKey);
+            response = await GetJsonAsync<TmdbSearchResponse>(path, withoutYear, cfg, ct).ConfigureAwait(false);
+            if (HasSearchResults(response))
+            {
+                return response;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(cfg.TmdbLanguage))
+        {
+            response = await GetJsonAsync<TmdbSearchResponse>(path, query, cfg, ct, omitConfiguredLanguage: true).ConfigureAwait(false);
+            if (HasSearchResults(response))
+            {
+                return response;
+            }
+
+            if (hasYearConstraint && !string.IsNullOrWhiteSpace(yearKey))
+            {
+                var withoutYear = new Dictionary<string, string>(query, StringComparer.Ordinal);
+                withoutYear.Remove(yearKey);
+                response = await GetJsonAsync<TmdbSearchResponse>(path, withoutYear, cfg, ct, omitConfiguredLanguage: true).ConfigureAwait(false);
+            }
+        }
+
+        return response;
+    }
+
+    private static bool HasSearchResults(TmdbSearchResponse? response)
+        => response?.Results != null && response.Results.Count > 0;
 
     private async Task<T?> GetJsonAsync<T>(string path, IDictionary<string, string> query, PluginConfiguration cfg, CancellationToken ct, bool omitConfiguredLanguage = false)
     {
