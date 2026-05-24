@@ -110,7 +110,8 @@ public sealed class FillFixEpisodeNumbersFromPath : IReturn<object>
 
 public sealed class ItemDiagnosticInfo
 {
-    public long Id { get; set; }
+    public string EntityId { get; set; } = string.Empty;
+    public long? InternalId { get; set; }
     public string RuntimeType { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
@@ -381,7 +382,8 @@ public sealed class ConfigurationService : IService
 
         return new ItemDiagnosticInfo
         {
-            Id = item.Id,
+            EntityId = item.Id.ToString(),
+            InternalId = ReadInt64Property(item, "InternalId"),
             RuntimeType = item.GetType().FullName ?? string.Empty,
             Name = item.Name ?? string.Empty,
             Path = item.Path ?? string.Empty,
@@ -434,5 +436,27 @@ public sealed class ConfigurationService : IService
         }
 
         return (bool)property.GetValue(instance)!;
+    }
+
+    private static long? ReadInt64Property(object instance, string propertyName)
+    {
+        var property = instance.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+        if (property == null || !property.CanRead)
+        {
+            return null;
+        }
+
+        var value = property.GetValue(instance);
+        if (value is long longValue)
+        {
+            return longValue;
+        }
+
+        if (value is int intValue)
+        {
+            return intValue;
+        }
+
+        return null;
     }
 }
