@@ -411,7 +411,7 @@ public sealed class TmdbMovieMetadataProvider : IRemoteMetadataProvider<Movie, M
     public Task<HttpResponseInfo> GetImageResponse(string url, CancellationToken cancellationToken) => MetadataProviderFactory.GetImageResponseAsync(url, cancellationToken);
 }
 
-public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series, SeriesInfo>, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
+public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series, SeriesInfo>, ISeriesMetadataProvider, IRemoteImageProvider, IHasOrder, IHasSupportedExternalIdentifiers
 {
     private readonly TmdbApiClient _tmdb;
     private readonly TvdbApiClient _tvdb;
@@ -428,6 +428,13 @@ public sealed class TmdbSeriesMetadataProvider : IRemoteMetadataProvider<Series,
     public int Order => 0;
     public string[] GetSupportedExternalIdentifiers() => new[] { "Tmdb", "Tvdb" };
     public bool Supports(BaseItem item) => item is Series;
+
+    public Task<RemoteSearchResult[]> GetAllEpisodes(SeriesInfo info, CancellationToken cancellationToken)
+    {
+        var lookupName = MetadataProviderFactory.ResolveLookupName(info.Name, info.Path);
+        _log?.Info($"TMDB series episode enumeration requested. Name='{lookupName}', Path='{info.Path ?? string.Empty}'");
+        return Task.FromResult(Array.Empty<RemoteSearchResult>());
+    }
 
     public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(SeriesInfo info, CancellationToken cancellationToken)
     {
