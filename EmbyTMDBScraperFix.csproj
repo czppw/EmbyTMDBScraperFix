@@ -6,7 +6,7 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <RootNamespace>EmbyTMDBScraperFix</RootNamespace>
     <AssemblyName>EmbyTMDBScraperFix</AssemblyName>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Authors>Open Source Community</Authors>
     <Description>Emby TMDB HTTP proxy scraper provider and incremental auto-scan plugin for mainland China network environments.</Description>
     <PackageId>EmbyTMDBScraperFix</PackageId>
@@ -18,5 +18,6 @@
     <EmbeddedResource Remove="Web\plugin.js" />
     <EmbeddedResource Include="Web\**\*.*" />
     <EmbeddedResource Include="plugin.js" />
+    <EmbeddedResource Include="Assets\thumb.png" />
   </ItemGroup>
 </Project>
