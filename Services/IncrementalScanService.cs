@@ -230,21 +230,22 @@ public sealed class IncrementalScanService : IDisposable
 
         for (var attempt = 1; attempt <= maxAttempts && remaining.Count > 0; attempt++)
         {
+            var deferredLookup = false;
+            var refreshedAny = false;
+            var refreshFailed = false;
+
             foreach (var file in remaining.ToList())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 try
                 {
-                    var directoryPath = Path.GetDirectoryName(file);
-                    var parentDirectoryPath = string.IsNullOrWhiteSpace(directoryPath) ? null : Path.GetDirectoryName(directoryPath);
-                    var item = _libraryManager.FindByPath(file, false)
-                        ?? (!string.IsNullOrWhiteSpace(directoryPath) ? _libraryManager.FindByPath(directoryPath, true) : null)
-                        ?? (!string.IsNullOrWhiteSpace(parentDirectoryPath) ? _libraryManager.FindByPath(parentDirectoryPath, true) : null);
+                    var item = FindRefreshTarget(file);
                     if (item == null)
                     {
-                        if (attempt == maxAttempts)
+                        deferredLookup = true;
+                        if (attempt == 1)
                         {
-                            _log.Warn($"Metadata refresh still deferred after {attempt} attempt(s): {file}");
+                            _log.Info($"Metadata refresh deferred until the item is indexed by Emby: {file}");
                         }
 
                         continue;
@@ -262,10 +263,12 @@ public sealed class IncrementalScanService : IDisposable
                     };
                     await _providerManager.RefreshFullItem(item, options, cancellationToken).ConfigureAwait(false);
                     remaining.Remove(file);
+                    refreshedAny = true;
                     _log.Info($"Metadata refresh completed: {item.Name} ({file})");
                 }
                 catch (Exception ex)
                 {
+                    refreshFailed = true;
                     if (attempt == maxAttempts)
                     {
                         _log.Warn($"Metadata refresh failed after {attempt} attempt(s): {file}; {ex.Message}");
@@ -277,6 +280,11 @@ public sealed class IncrementalScanService : IDisposable
                 }
             }
 
+            if (remaining.Count > 0 && deferredLookup && !refreshedAny && !refreshFailed)
+            {
+                break;
+            }
+
             if (remaining.Count > 0 && attempt < maxAttempts)
             {
                 await Task.Delay(TimeSpan.FromSeconds(Math.Min(20, 5 * attempt)), cancellationToken).ConfigureAwait(false);
@@ -284,6 +292,19 @@ public sealed class IncrementalScanService : IDisposable
         }
 
         return remaining.ToList();
+    }
+
+    private BaseItem? FindRefreshTarget(string file)
+    {
+        var directoryPath = Path.GetDirectoryName(file);
+        var parentDirectoryPath = string.IsNullOrWhiteSpace(directoryPath) ? null : Path.GetDirectoryName(directoryPath);
+
+        return _libraryManager.FindByPath(file, null)
+            ?? _libraryManager.FindByPath(file, false)
+            ?? (!string.IsNullOrWhiteSpace(directoryPath) ? _libraryManager.FindByPath(directoryPath, null) : null)
+            ?? (!string.IsNullOrWhiteSpace(directoryPath) ? _libraryManager.FindByPath(directoryPath, true) : null)
+            ?? (!string.IsNullOrWhiteSpace(parentDirectoryPath) ? _libraryManager.FindByPath(parentDirectoryPath, null) : null)
+            ?? (!string.IsNullOrWhiteSpace(parentDirectoryPath) ? _libraryManager.FindByPath(parentDirectoryPath, true) : null);
     }
 
     private IEnumerable<LibraryRoot> GetEnabledRoots(PluginConfiguration cfg)

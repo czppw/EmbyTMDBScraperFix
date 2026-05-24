@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -88,44 +90,333 @@ public sealed class TmdbApiClient
 
     private async Task<TmdbSearchResponse?> SearchWithFallbackAsync(string path, Dictionary<string, string> query, PluginConfiguration cfg, CancellationToken ct, bool hasYearConstraint, string yearKey)
     {
-        var response = await GetJsonAsync<TmdbSearchResponse>(path, query, cfg, ct).ConfigureAwait(false);
-        if (HasSearchResults(response))
+        var originalQuery = query.TryGetValue("query", out var rawQuery) ? rawQuery : string.Empty;
+        foreach (var queryVariant in BuildSearchQueryVariants(originalQuery))
         {
-            return response;
-        }
+            var variantQuery = new Dictionary<string, string>(query, StringComparer.Ordinal)
+            {
+                ["query"] = queryVariant
+            };
 
-        if (hasYearConstraint && !string.IsNullOrWhiteSpace(yearKey))
-        {
-            var withoutYear = new Dictionary<string, string>(query, StringComparer.Ordinal);
-            withoutYear.Remove(yearKey);
-            response = await GetJsonAsync<TmdbSearchResponse>(path, withoutYear, cfg, ct).ConfigureAwait(false);
+            var response = await GetJsonAsync<TmdbSearchResponse>(path, variantQuery, cfg, ct).ConfigureAwait(false);
             if (HasSearchResults(response))
             {
-                return response;
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(cfg.TmdbLanguage))
-        {
-            response = await GetJsonAsync<TmdbSearchResponse>(path, query, cfg, ct, omitConfiguredLanguage: true).ConfigureAwait(false);
-            if (HasSearchResults(response))
-            {
+                SortSearchResults(response!, originalQuery);
                 return response;
             }
 
             if (hasYearConstraint && !string.IsNullOrWhiteSpace(yearKey))
             {
-                var withoutYear = new Dictionary<string, string>(query, StringComparer.Ordinal);
+                var withoutYear = new Dictionary<string, string>(variantQuery, StringComparer.Ordinal);
                 withoutYear.Remove(yearKey);
-                response = await GetJsonAsync<TmdbSearchResponse>(path, withoutYear, cfg, ct, omitConfiguredLanguage: true).ConfigureAwait(false);
+                response = await GetJsonAsync<TmdbSearchResponse>(path, withoutYear, cfg, ct).ConfigureAwait(false);
+                if (HasSearchResults(response))
+                {
+                    SortSearchResults(response!, originalQuery);
+                    return response;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(cfg.TmdbLanguage))
+            {
+                response = await GetJsonAsync<TmdbSearchResponse>(path, variantQuery, cfg, ct, omitConfiguredLanguage: true).ConfigureAwait(false);
+                if (HasSearchResults(response))
+                {
+                    SortSearchResults(response!, originalQuery);
+                    return response;
+                }
+
+                if (hasYearConstraint && !string.IsNullOrWhiteSpace(yearKey))
+                {
+                    var withoutYear = new Dictionary<string, string>(variantQuery, StringComparer.Ordinal);
+                    withoutYear.Remove(yearKey);
+                    response = await GetJsonAsync<TmdbSearchResponse>(path, withoutYear, cfg, ct, omitConfiguredLanguage: true).ConfigureAwait(false);
+                    if (HasSearchResults(response))
+                    {
+                        SortSearchResults(response!, originalQuery);
+                        return response;
+                    }
+                }
             }
         }
 
-        return response;
+        if (!string.IsNullOrWhiteSpace(originalQuery))
+        {
+            _log.Warn($"TMDB search returned no results for query '{originalQuery}' on path '{path}'.");
+        }
+
+        return new TmdbSearchResponse();
     }
 
     private static bool HasSearchResults(TmdbSearchResponse? response)
         => response?.Results != null && response.Results.Count > 0;
+
+    private static List<string> BuildSearchQueryVariants(string query)
+    {
+        var variants = new List<string>();
+        AddVariant(variants, query);
+
+        var withoutBracketed = StripBracketedSegments(query);
+        AddVariant(variants, withoutBracketed);
+
+        var normalized = NormalizePunctuation(withoutBracketed);
+        AddVariant(variants, normalized);
+
+        var spacedTrailingYear = InsertSpaceBeforeTrailingYear(normalized);
+        AddVariant(variants, spacedTrailingYear);
+
+        var withoutTrailingYear = RemoveTrailingYear(normalized);
+        AddVariant(variants, withoutTrailingYear);
+
+        return variants;
+    }
+
+    private static void AddVariant(List<string> variants, string? candidate)
+    {
+        var value = CollapseWhitespace(candidate);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (!variants.Contains(value, StringComparer.OrdinalIgnoreCase))
+        {
+            variants.Add(value);
+        }
+    }
+
+    private static string CollapseWhitespace(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder();
+        var previousWasWhitespace = false;
+        foreach (var ch in value.Trim())
+        {
+            if (char.IsWhiteSpace(ch))
+            {
+                if (!previousWasWhitespace)
+                {
+                    builder.Append(' ');
+                    previousWasWhitespace = true;
+                }
+
+                continue;
+            }
+
+            builder.Append(ch);
+            previousWasWhitespace = false;
+        }
+
+        return builder.ToString();
+    }
+
+    private static string StripBracketedSegments(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(value.Length);
+        var depth = 0;
+        foreach (var ch in value)
+        {
+            if (ch is '(' or '[' or '{' or '（' or '【')
+            {
+                depth++;
+                continue;
+            }
+
+            if (ch is ')' or ']' or '}' or '）' or '】')
+            {
+                if (depth > 0)
+                {
+                    depth--;
+                }
+
+                continue;
+            }
+
+            if (depth == 0)
+            {
+                builder.Append(ch);
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static string NormalizePunctuation(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            builder.Append(ch switch
+            {
+                '.' or '_' or '-' or '·' or ':' or '：' or '/' or '\\' => ' ',
+                _ => ch
+            });
+        }
+
+        return builder.ToString();
+    }
+
+    private static string InsertSpaceBeforeTrailingYear(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        if (!EndsWithFourDigits(trimmed))
+        {
+            return trimmed;
+        }
+
+        var splitIndex = trimmed.Length - 4;
+        if (splitIndex <= 0 || char.IsWhiteSpace(trimmed[splitIndex - 1]))
+        {
+            return trimmed;
+        }
+
+        return trimmed.Insert(splitIndex, " ");
+    }
+
+    private static string RemoveTrailingYear(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        if (!EndsWithFourDigits(trimmed))
+        {
+            return trimmed;
+        }
+
+        return trimmed.Substring(0, trimmed.Length - 4).TrimEnd();
+    }
+
+    private static bool EndsWithFourDigits(string value)
+        => value.Length >= 4
+           && char.IsDigit(value[value.Length - 1])
+           && char.IsDigit(value[value.Length - 2])
+           && char.IsDigit(value[value.Length - 3])
+           && char.IsDigit(value[value.Length - 4]);
+
+    private static void SortSearchResults(TmdbSearchResponse response, string originalQuery)
+    {
+        response.Results = response.Results
+            .OrderByDescending(x => ScoreSearchItem(x, originalQuery))
+            .ThenByDescending(x => x.Vote_Average)
+            .ThenByDescending(x => ParseDateValue(x.First_Air_Date ?? x.Release_Date))
+            .ToList();
+    }
+
+    private static int ScoreSearchItem(TmdbSearchItem item, string originalQuery)
+    {
+        var normalizedOriginal = NormalizeForComparison(originalQuery);
+        var normalizedLocalized = NormalizeForComparison(item.Name ?? item.Title);
+        var normalizedOriginalName = NormalizeForComparison(item.Original_Name ?? item.Original_Title);
+        var score = 0;
+
+        if (!string.IsNullOrWhiteSpace(normalizedOriginal))
+        {
+            score = Math.Max(score, ScoreName(normalizedLocalized, normalizedOriginal));
+            score = Math.Max(score, ScoreName(normalizedOriginalName, normalizedOriginal));
+
+            var trailingDigits = ExtractTrailingDigits(normalizedOriginal);
+            if (!string.IsNullOrWhiteSpace(trailingDigits))
+            {
+                if (normalizedLocalized.EndsWith(trailingDigits, StringComparison.Ordinal) || normalizedOriginalName.EndsWith(trailingDigits, StringComparison.Ordinal))
+                {
+                    score += 150;
+                }
+            }
+        }
+
+        return score;
+    }
+
+    private static int ScoreName(string candidate, string original)
+    {
+        if (string.IsNullOrWhiteSpace(candidate) || string.IsNullOrWhiteSpace(original))
+        {
+            return 0;
+        }
+
+        if (candidate.Equals(original, StringComparison.Ordinal))
+        {
+            return 1000;
+        }
+
+        if (candidate.IndexOf(original, StringComparison.Ordinal) >= 0 || original.IndexOf(candidate, StringComparison.Ordinal) >= 0)
+        {
+            return 700;
+        }
+
+        var originalWithoutTrailingYear = NormalizeForComparison(RemoveTrailingYear(original));
+        if (!string.IsNullOrWhiteSpace(originalWithoutTrailingYear)
+            && (candidate.IndexOf(originalWithoutTrailingYear, StringComparison.Ordinal) >= 0 || originalWithoutTrailingYear.IndexOf(candidate, StringComparison.Ordinal) >= 0))
+        {
+            return 500;
+        }
+
+        return 0;
+    }
+
+    private static string NormalizeForComparison(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            if (char.IsLetterOrDigit(ch))
+            {
+                builder.Append(char.ToLowerInvariant(ch));
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static string ExtractTrailingDigits(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var index = value.Length;
+        while (index > 0 && char.IsDigit(value[index - 1]))
+        {
+            index--;
+        }
+
+        return index == value.Length ? string.Empty : value.Substring(index);
+    }
+
+    private static DateTime ParseDateValue(string? value)
+    {
+        return DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed)
+            ? parsed
+            : DateTime.MinValue;
+    }
 
     private async Task<T?> GetJsonAsync<T>(string path, IDictionary<string, string> query, PluginConfiguration cfg, CancellationToken ct, bool omitConfiguredLanguage = false)
     {
