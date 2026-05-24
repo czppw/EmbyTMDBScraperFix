@@ -6,7 +6,7 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <RootNamespace>EmbyTMDBScraperFix</RootNamespace>
     <AssemblyName>EmbyTMDBScraperFix</AssemblyName>
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
     <Authors>Open Source Community</Authors>
     <Description>Emby TMDB HTTP proxy scraper provider and incremental auto-scan plugin for mainland China network environments.</Description>
     <PackageId>EmbyTMDBScraperFix</PackageId>

@@ -76,26 +76,18 @@ public sealed class PluginRuntime : IServerEntryPoint
                 .FirstOrDefault(t => t.ScheduledTask.Key == "EmbyTMDBScraperFixAutoIncrementalScan");
             if (taskWorker != null)
             {
-                taskWorker.Triggers = new[]
-                {
-                    new TaskTriggerInfo
-                    {
-                        Type = "IntervalTrigger",
-                        IntervalTicks = interval.Ticks,
-                        MaxRuntimeTicks = TimeSpan.FromMinutes(8).Ticks
-                    }
-                };
+                taskWorker.Triggers = Array.Empty<TaskTriggerInfo>();
                 taskWorker.ReloadTriggerEvents();
-                _log.Info($"Emby scheduled task trigger updated to {interval.TotalMinutes} minutes.");
+                _log.Info("Emby scheduled task triggers cleared. Manual execution remains available from the dashboard.");
             }
             else
             {
-                _log.Warn("Scheduled task not found for trigger update.");
+                _log.Warn("Scheduled task not found for trigger cleanup.");
             }
         }
         catch (Exception ex)
         {
-            _log.Error($"Failed to update scheduled task trigger: {ex.Message}", ex);
+            _log.Error($"Failed to clean up scheduled task triggers: {ex.Message}", ex);
         }
     }
 

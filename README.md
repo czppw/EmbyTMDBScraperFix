@@ -1,169 +1,130 @@
 # EmbyTMDBScraperFix
 
-适用于中国大陆网络环境的 Emby Server 插件，提供：
-
-- **可通过 HTTP 代理访问的自定义刮削器**
-- **TMDB 主源 + TheTVDB 备用源**
-- **电影 / 剧集 / 分季 / 分集 / 人物（Person）元数据支持**
-- **10 分钟默认增量自动扫描与自动刷新**
-
 [![Build](https://github.com/czppw/EmbyTMDBScraperFix/actions/workflows/build.yml/badge.svg)](https://github.com/czppw/EmbyTMDBScraperFix/actions/workflows/build.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
----
+面向中国大陆网络环境的 Emby Server 插件，提供可代理的 TMDB/TVDB 元数据抓取、增量扫描、`.strm` 支持，以及电影、剧集、分季、分集、人物和图片刮削能力。
 
-## 一、项目定位
+## 当前版本
 
-`EmbyTMDBScraperFix` 是一个面向中国大陆用户的 Emby Server 插件，解决以下常见问题：
+- `v1.1.0`
+- 适配验证：`Emby 4.9.5.0`
+- 实测环境：`Docker / Linux`
 
-1. **Emby 无法正常刮削海外元数据**
-   - 国内网络环境下，TMDB / TheTVDB 等站点常常无法直连
-2. **媒体入库不及时**
-   - 新增媒体后，要等待较久才能在 Emby 中看到更新
-3. **不希望影响本地局域网和内网访问**
-   - 只让“刮削流量”走 HTTP 代理，不影响本地文件、本地服务和内网 API
+## v1.1.0 重点更新
 
----
+- 修复电影、剧集、分季、分集、人物的 TMDB/TVDB 元数据链路
+- 修复人物写入 Emby `People` 列表
+- 修复远程图片被语言过滤导致的海报不下载问题
+- 新增分集图片支持
+- 修复 `.strm` 增量刷新过早重试的问题
+- 新增更稳健的 TMDB 搜索回退策略
+- 新增批量修复分集编号、路径/条目/图片诊断接口
+- 修复前端 `innerHTML` 风险和若干兼容性问题
 
-## 二、核心功能
+## 已验证结果
 
-### 1. HTTP 代理支持
+- 电影：名称、简介、海报、类型、人物正常
+- 剧集：`Series -> Season -> Episode` 层级正常
+- 分集：`S01E01 ~ S01E20` 可正确写入 `Tmdb ID / IndexNumber / ParentIndexNumber`
+- 人物：可写入演员信息和人物简介
+- 图片：电影海报、剧集海报、分集图片链路正常
+- 增量：`.strm` 文件变更可进入延后刷新流程
 
-- 仅支持 **HTTP 代理**
-- 不支持 Socks5 / HTTPS 代理
-- 只对海外元数据站点走代理，默认包含：
-  - TMDB
-  - TheTVDB
-  - TVDB 图片域名
-- TMDB API 地址支持配置替代域名：默认 `https://api.tmdb.org`；如果配置留空，则回落到系统默认 `https://api.themoviedb.org`
-- 自动排除本地地址和私有网段：
-  - `127.0.0.1`
-  - `localhost`
-  - `10.x.x.x`
-  - `172.16.x.x - 172.31.x.x`
-  - `192.168.x.x`
-  - `169.254.x.x`
+## 安装
 
-### 2. 自定义元数据提供器
+### 方式一：从 Releases 下载
 
-插件当前已提供以下可选刮削器：
+1. 打开 [Releases](https://github.com/czppw/EmbyTMDBScraperFix/releases)
+2. 下载最新版本的 `EmbyTMDBScraperFix.dll`
+3. 复制到 Emby 插件目录
+4. 重启 Emby Server
 
-- `EmbyTMDBScraperFix TMDB Movie`
-- `EmbyTMDBScraperFix TMDB Series`
-- `EmbyTMDBScraperFix TMDB Season`
-- `EmbyTMDBScraperFix TMDB Episode`
-- `EmbyTMDBScraperFix TMDB Person`
+### 方式二：从 GitHub Actions 下载构建产物
 
-可在 Emby 媒体库设置的**元数据提供器**列表里勾选并调整优先级。
+1. 打开 [Actions](https://github.com/czppw/EmbyTMDBScraperFix/actions/workflows/build.yml)
+2. 进入最新一次成功构建
+3. 下载产物 `EmbyTMDBScraperFix`
+4. 解压并取出 `EmbyTMDBScraperFix.dll`
 
-### 3. TheTVDB 备用源
+### Docker / Linux 部署
 
-当 TMDB 数据缺失、或 TV 类元数据不完整时，可选启用 **TheTVDB fallback**。
+常见插件目录示例：
 
-当前 TheTVDB 备用支持覆盖：
+```text
+/config/plugins/
+```
 
-- 剧集（Series）
-- 分季（Season）
-- 分集（Episode）
-- 人物（Person）
+复制后重启容器：
 
-> 注意：TheTVDB 使用时需要你提供 `API Key`，某些场景还可能需要 `PIN`。
+```bash
+docker restart emby
+```
 
-### 4. 分季与人物刮削支持
+## Emby 库配置建议
 
-除了电影 / 剧集 / 分集外，插件现在还支持：
+电影库：
 
-#### Season（分季）
-- 季名称
-- 季简介
-- 季图片
-- 季编号
-- 可从 TMDB 获取，必要时回退到 TheTVDB
+- `Metadata Fetchers` 启用 `EmbyTMDBScraperFix TMDB Movie`
+- `Image Fetchers` 启用插件图片提供器
 
-#### Person（人物）
-- 人物名称
-- 人物简介
-- 人物头像
-- 出生信息（作为可映射年份来源）
-- 可从 TMDB 获取，必要时回退到 TheTVDB
+剧集库：
 
-### 5. 增量自动扫描
+- `Metadata Fetchers` 启用 `EmbyTMDBScraperFix TMDB Series`
+- `Image Fetchers` 启用插件图片提供器
 
-- 默认 **10 分钟**扫描一次
-- 周期自动扫描由插件内部后台定时器驱动，配置页保存后会立即按 `ScanIntervalMinutes` 生效
-- Emby 计划任务页中的 `EmbyTMDBScraperFix Auto Incremental Scan` 仅保留为手动运行入口，不再作为周期调度真值来源
-- 仅检测：
-  - 新增文件
-  - 修改文件
-  - 删除文件
-- 不做全盘全库无脑扫描
-- 支持配置只扫描指定媒体库
+建议在测试阶段临时关闭同类内置抓取器，先确认插件链路单独正常，再按需要恢复。
 
-### 6. 自动元数据刷新
+## 推荐命名
 
-扫描检测到文件变化后：
+电影：
 
-- 自动触发 Emby 元数据刷新
-- 自动重新刮削图片和基础信息
-- 刮削失败时会按配置进行重试
+```text
+方世玉 (1993).strm
+```
 
-### 7. 日志系统
+剧集：
 
-插件会记录：
+```text
+/TV-Test/请回答1988 (2015)/Season 01/请回答1988 (2015) - S01E01.strm
+```
 
-- 代理状态
-- 代理测试结果
-- 扫描时间
-- 文件变动
-- 元数据刷新结果
-- 错误信息
+## 测试流程
 
-并提供日志接口供配置页查看。
+1. 在插件配置页填写 `TMDB API Key`
+2. 如需代理，配置 `HTTP Proxy` 并点击“测试代理”
+3. 新建最小测试库
+4. 先测试一个电影条目：
+   - 刷新元数据
+   - 确认名称、简介、人物、海报
+5. 再测试一个剧集条目：
+   - 确认 `Series / Season / Episode` 层级
+   - 确认每集 `TMDB ID / IndexNumber / ParentIndexNumber`
+6. 测试一个 `.strm` 文件增量变更：
+   - 新增或修改文件
+   - 观察插件日志
 
----
+## 升级注意事项
 
-## 三、当前支持范围
+- 从旧版本升级到 `v1.1.0` 后，建议对受影响的库执行一次手动刷新
+- 对于历史脏条目，优先使用标准目录结构重新扫描
+- 如果旧库中存在分集编号缺失，可用诊断接口批量修复
+- 如果旧电影已经有空图片状态，执行一次图片刷新即可补图，不需要重建整个库
+- 如果存在重复库、重叠路径或旧测试库，建议先清理，避免 Emby 选错库配置
 
-### 已支持
+## 诊断接口
 
-- 电影 Movie
-- 剧集 Series
-- 分季 Season
-- 分集 Episode
-- 人物 Person
-- TheTVDB fallback
-- 嵌入式配置页
-- 自动扫描
-- 自动刷新
-- GitHub Actions 自动构建
+插件当前提供以下常用诊断接口：
 
-### 当前实现说明
+- `GET /EmbyTMDBScraperFix/Diagnostics/ResolvePath`
+- `GET /EmbyTMDBScraperFix/Diagnostics/ListIndexedItems`
+- `GET /EmbyTMDBScraperFix/Diagnostics/ResolveInternalId`
+- `GET /EmbyTMDBScraperFix/Diagnostics/RemoteImages`
+- `POST /EmbyTMDBScraperFix/Diagnostics/RefreshItem`
+- `POST /EmbyTMDBScraperFix/Diagnostics/FillEpisodeNumbersFromPath`
+- `POST /EmbyTMDBScraperFix/Diagnostics/RepairEpisodeNumbers`
 
-- **TMDB 是主源**
-- **TheTVDB 是备用源**
-- 插件是**可选刮削器**，需要在 Emby 媒体库中手动启用
-- **不能保证无差别劫持 Emby 内置全部刮削流量**
-- 高风险全局代理 Hook 仅做“尽力而为”的补充
-
----
-
-## 四、安装方法
-
-### 方式一：下载 GitHub Actions 构建产物
-
-1. 打开仓库 Actions 页面
-2. 选择最新成功的构建
-3. 在页面底部下载 `Artifacts`
-4. 得到 `EmbyTMDBScraperFix.dll`
-
-### 方式二：本地编译
-
-环境要求：
-
-- .NET SDK 7.0+
-- Emby Server 4.9.x
-
-执行：
+## 源码构建
 
 ```bash
 git clone https://github.com/czppw/EmbyTMDBScraperFix.git
@@ -172,142 +133,20 @@ dotnet restore
 dotnet build --configuration Release
 ```
 
-编译产物位置：
+输出文件：
 
 ```text
 bin/Release/netstandard2.0/EmbyTMDBScraperFix.dll
 ```
 
-### 部署到 Emby
+## 文档
 
-把 DLL 复制到 Emby 的插件目录，例如：
+- [Wiki Home](wiki/Home.md)
+- [安装指南](wiki/Installation.md)
+- [配置说明](wiki/Configuration.md)
+- [使用说明](wiki/Usage.md)
+- [更新日志](wiki/Changelog.md)
 
-```text
-<Emby数据目录>/plugins/
-```
+## 许可证
 
-然后：
-
-1. 重启 Emby Server
-2. 打开 Dashboard → 插件
-3. 找到 `EmbyTMDBScraperFix`
-4. 进入配置页
-
----
-
-## 五、配置说明
-
-### 1. TMDB 设置
-
-- `TMDB API Key`
-- `TMDB 语言`
-- `TMDB 区域`
-- `是否启用成人元数据`
-
-### 2. TheTVDB 设置
-
-- `EnableTvdbFallback`
-- `TvdbApiKey`
-- `TvdbPin`
-- `TvdbLanguage`
-
-### 3. HTTP 代理设置
-
-- `ProxyEnabled`
-- `ProxyHost`
-- `ProxyPort`
-- `ProxyUsername`
-- `ProxyPassword`
-- `EnableLegacyGlobalProxyHook`（高风险）
-
-### 4. 自动扫描设置
-
-- `AutoScanEnabled`
-- `ScanIntervalMinutes`
-- `AutoMetadataRefresh`
-- `MaxScrapeRetryCount`
-- `Libraries`
-
-> 注：周期自动扫描以插件配置页里的 `ScanIntervalMinutes` 为准，由插件内部后台定时器执行；计划任务页主要用于手动触发一次扫描。
-
----
-
-## 六、如何在媒体库中使用本插件
-
-1. 进入 Emby Dashboard → 媒体库
-2. 新建媒体库或编辑现有媒体库
-3. 在 **Metadata Providers / 元数据提供器** 中选择：
-   - 电影库：`EmbyTMDBScraperFix TMDB Movie`
-   - 剧集库：`EmbyTMDBScraperFix TMDB Series`
-4. 将本插件拖到更高优先级
-5. 保存设置
-
-对于 Season / Episode / Person，Emby 会在对应对象刷新时使用插件提供器参与元数据获取。
-
----
-
-## 七、API 端点
-
-插件当前提供以下接口：
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/EmbyTMDBScraperFix/Configuration` | 获取当前配置 |
-| POST | `/EmbyTMDBScraperFix/Configuration` | 保存配置 |
-| POST | `/EmbyTMDBScraperFix/TestProxy` | 测试代理连通性 |
-| GET | `/EmbyTMDBScraperFix/Logs` | 读取最近日志 |
-| GET | `/EmbyTMDBScraperFix/Libraries` | 获取虚拟媒体库列表 |
-
----
-
-## 八、项目结构
-
-```text
-EmbyTMDBScraperFix/
-├── .github/workflows/build.yml
-├── Configuration/
-│   ├── PluginConfiguration.cs
-│   └── EmbyTMDBScraperFixConfigurationPage.cs
-├── Controllers/
-│   └── ConfigurationService.cs
-├── Services/
-│   ├── TmdbApiClient.cs
-│   ├── TvdbApiClient.cs
-│   ├── TmdbMetadataProviders.cs
-│   ├── ProxyHttpClientService.cs
-│   ├── ProxyPolicyService.cs
-│   ├── IncrementalScanService.cs
-│   └── PluginLogService.cs
-├── Tasks/
-│   └── AutoIncrementalScanTask.cs
-├── Web/
-│   └── configuration.html
-├── Plugin.cs
-├── PluginRuntime.cs
-├── EmbyTMDBScraperFix.csproj
-├── README.md
-└── LICENSE
-```
-
----
-
-## 九、常见问题
-
-### 1. 支持 HTTPS 代理吗？
-不支持，目前只支持 **HTTP 代理**。
-
-### 2. 会不会影响本地局域网访问？
-不会。插件默认只代理元数据站点，并排除本地/私有地址。
-
-### 3. TheTVDB 一定需要配置吗？
-不是必须。默认可以只使用 TMDB。只有在你希望剧集 / 分季 / 分集 / 人物有备用源时，才建议启用。
-
-### 4. 为什么 Season / Person 不是单独勾选？
-因为它们是 Emby 元数据体系的一部分。当你启用了对应主元数据提供器并触发刷新时，插件会在相应对象上参与工作。
-
-
----
-
-## 十、许可证
-
-本项目使用 [MIT License](LICENSE)。
+MIT License

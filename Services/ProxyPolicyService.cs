@@ -18,7 +18,8 @@ public sealed class ProxyPolicyService
         if (!cfg.ProxyEnabled || string.IsNullOrWhiteSpace(cfg.ProxyHost) || cfg.ProxyPort <= 0) return false;
         if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) return false;
         if (IsLocalOrPrivate(uri.Host)) return false;
-        return cfg.MetadataProxyHosts.Any(host => HostMatches(uri.Host, host));
+        return cfg.MetadataProxyHosts.Any(host => HostMatches(uri.Host, host))
+            || TmdbUrlHelper.IsTmdbApiHost(uri.Host, cfg.TmdbApiBaseUrl);
     }
 
     public WebProxy? CreateProxy(PluginConfiguration cfg)
