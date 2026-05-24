@@ -48,7 +48,14 @@ public sealed class TvdbApiClient
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
         var ensuredToken = token!;
-        return await GetJsonAsync<TvdbSeriesResponse>($"/series/{id}/extended", cfg, ensuredToken, ct).ConfigureAwait(false);
+        var response = await GetJsonAsync<TvdbSeriesResponse>($"/series/{id}/extended", cfg, ensuredToken, ct).ConfigureAwait(false);
+        await ApplyTranslationAsync($"/series/{id}", cfg, ensuredToken, ct, data =>
+        {
+            if (response?.Data == null) return;
+            if (!string.IsNullOrWhiteSpace(data?.Name)) response.Data.Name = data.Name;
+            if (!string.IsNullOrWhiteSpace(data?.Overview)) response.Data.Overview = data.Overview;
+        }).ConfigureAwait(false);
+        return response;
     }
 
     public async Task<TvdbSeasonResponse?> GetSeasonAsync(string id, PluginConfiguration cfg, CancellationToken ct)
@@ -56,7 +63,14 @@ public sealed class TvdbApiClient
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
         var ensuredToken = token!;
-        return await GetJsonAsync<TvdbSeasonResponse>($"/seasons/{id}/extended", cfg, ensuredToken, ct).ConfigureAwait(false);
+        var response = await GetJsonAsync<TvdbSeasonResponse>($"/seasons/{id}/extended", cfg, ensuredToken, ct).ConfigureAwait(false);
+        await ApplyTranslationAsync($"/seasons/{id}", cfg, ensuredToken, ct, data =>
+        {
+            if (response?.Data == null) return;
+            if (!string.IsNullOrWhiteSpace(data?.Name)) response.Data.Name = data.Name;
+            if (!string.IsNullOrWhiteSpace(data?.Overview)) response.Data.Overview = data.Overview;
+        }).ConfigureAwait(false);
+        return response;
     }
 
     public async Task<TvdbEpisodeResponse?> GetEpisodeAsync(string id, PluginConfiguration cfg, CancellationToken ct)
@@ -64,7 +78,14 @@ public sealed class TvdbApiClient
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
         var ensuredToken = token!;
-        return await GetJsonAsync<TvdbEpisodeResponse>($"/episodes/{id}/extended", cfg, ensuredToken, ct).ConfigureAwait(false);
+        var response = await GetJsonAsync<TvdbEpisodeResponse>($"/episodes/{id}/extended", cfg, ensuredToken, ct).ConfigureAwait(false);
+        await ApplyTranslationAsync($"/episodes/{id}", cfg, ensuredToken, ct, data =>
+        {
+            if (response?.Data == null) return;
+            if (!string.IsNullOrWhiteSpace(data?.Name)) response.Data.Name = data.Name;
+            if (!string.IsNullOrWhiteSpace(data?.Overview)) response.Data.Overview = data.Overview;
+        }).ConfigureAwait(false);
+        return response;
     }
 
     public async Task<TvdbPersonResponse?> GetPersonAsync(string id, PluginConfiguration cfg, CancellationToken ct)
@@ -72,7 +93,14 @@ public sealed class TvdbApiClient
         var token = await EnsureTokenAsync(cfg, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(token)) return null;
         var ensuredToken = token!;
-        return await GetJsonAsync<TvdbPersonResponse>($"/people/{id}/extended", cfg, ensuredToken, ct).ConfigureAwait(false);
+        var response = await GetJsonAsync<TvdbPersonResponse>($"/people/{id}/extended", cfg, ensuredToken, ct).ConfigureAwait(false);
+        await ApplyTranslationAsync($"/people/{id}", cfg, ensuredToken, ct, data =>
+        {
+            if (response?.Data == null) return;
+            if (!string.IsNullOrWhiteSpace(data?.Name)) response.Data.Name = data.Name;
+            if (!string.IsNullOrWhiteSpace(data?.Overview)) response.Data.Overview = data.Overview;
+        }).ConfigureAwait(false);
+        return response;
     }
 
     public string NormalizeImageUrl(string? url)
@@ -100,7 +128,6 @@ public sealed class TvdbApiClient
         {
             var body = new TvdbLoginRequest { ApiKey = cfg.TvdbApiKey, Pin = cfg.TvdbPin };
             var json = JsonSerializer.Serialize(body, JsonOptions);
-            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
             var uri = new Uri(BaseUrl + "/login");
             using var client = CreateHttpClient(uri, cfg, TimeSpan.FromSeconds(20));
             using var request = new HttpRequestMessage(HttpMethod.Post, uri)
@@ -129,6 +156,10 @@ public sealed class TvdbApiClient
         using var client = CreateHttpClient(uri, cfg, TimeSpan.FromSeconds(30));
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + token);
+        if (!string.IsNullOrWhiteSpace(cfg.TvdbLanguage))
+        {
+            request.Headers.TryAddWithoutValidation("Accept-Language", cfg.TvdbLanguage);
+        }
         using var response = await client.SendAsync(request, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
@@ -143,6 +174,21 @@ public sealed class TvdbApiClient
 
         var responseStream = stream;
         return await JsonSerializer.DeserializeAsync<T>(responseStream, JsonOptions, ct).ConfigureAwait(false);
+    }
+
+    private async Task ApplyTranslationAsync(string relativeBaseUrl, PluginConfiguration cfg, string token, CancellationToken ct, Action<TvdbTranslation?> apply)
+    {
+        if (string.IsNullOrWhiteSpace(cfg.TvdbLanguage))
+        {
+            return;
+        }
+
+        var translation = await GetJsonAsync<TvdbTranslationResponse>(
+            $"{relativeBaseUrl}/translations/{Uri.EscapeDataString(cfg.TvdbLanguage)}",
+            cfg,
+            token,
+            ct).ConfigureAwait(false);
+        apply(translation?.Data);
     }
 
     private HttpClient CreateHttpClient(Uri uri, PluginConfiguration cfg, TimeSpan timeout)
@@ -351,4 +397,19 @@ public sealed class TvdbPersonData
 
     [JsonPropertyName("birth")]
     public string? Birth { get; set; }
+}
+
+public sealed class TvdbTranslationResponse
+{
+    [JsonPropertyName("data")]
+    public TvdbTranslation? Data { get; set; }
+}
+
+public sealed class TvdbTranslation
+{
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("overview")]
+    public string? Overview { get; set; }
 }

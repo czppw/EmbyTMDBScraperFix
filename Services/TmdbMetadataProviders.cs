@@ -48,11 +48,13 @@ internal static class MetadataProviderFactory
     public static RemoteSearchResult ToTmdbRemoteSearchResult(TmdbSearchItem item, string providerName, string? imageUrl, bool isSeries)
     {
         var date = isSeries ? item.First_Air_Date : item.Release_Date;
-        var name = isSeries ? item.Name ?? item.Original_Name : item.Title ?? item.Original_Title;
+        var name = isSeries
+            ? item.Name ?? item.Original_Name
+            : item.Title ?? item.Original_Title ?? item.Name ?? item.Original_Name;
         var result = new RemoteSearchResult
         {
             Name = name ?? string.Empty,
-            OriginalTitle = isSeries ? item.Original_Name : item.Original_Title,
+            OriginalTitle = isSeries ? item.Original_Name : item.Original_Title ?? item.Original_Name,
             Overview = item.Overview,
             ProductionYear = ParseYear(date),
             PremiereDate = ParseDate(date),

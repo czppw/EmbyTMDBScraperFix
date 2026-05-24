@@ -51,14 +51,14 @@ public sealed class ProxyHttpClientService
                 result.Items.Add(new ProxyTestItem
                 {
                     Name = target.Name,
-                    Url = target.Url,
+                    Url = TmdbUrlHelper.SanitizeUrl(target.Url),
                     Proxied = _policy.ShouldProxy(uri, cfg),
                     Reachable = false,
                     Success = false,
                     StatusCode = 0,
                     Message = ex.Message
                 });
-                _log.Warn($"Proxy test failed for {target.Url}: {ex.Message}");
+                _log.Warn($"Proxy test failed for {TmdbUrlHelper.SanitizeUrl(target.Url)}: {ex.Message}");
             }
         }
 
@@ -110,7 +110,7 @@ public sealed class ProxyHttpClientService
         }
         catch (Exception ex) when (ShouldFallbackToWebRequest(uri, cfg, ex))
         {
-            _log.Warn($"HttpClient TMDB request failed, retrying with HttpWebRequest: {uri}. {ex.Message}");
+            _log.Warn($"HttpClient TMDB request failed, retrying with HttpWebRequest: {TmdbUrlHelper.SanitizeUrl(uri.ToString())}. {ex.Message}");
             return await GetStreamViaWebRequestAsync(uri, cfg, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -250,7 +250,7 @@ public sealed class ProxyHttpClientService
     private bool ShouldFallbackToWebRequest(Uri uri, PluginConfiguration cfg, Exception ex)
     {
         if (!_policy.ShouldProxy(uri, cfg)) return false;
-        if (!TmdbUrlHelper.IsTmdbApiHost(uri.Host)) return false;
+        if (!TmdbUrlHelper.IsTmdbApiHost(uri.Host, cfg.TmdbApiBaseUrl)) return false;
         return ex is TaskCanceledException || ex is TimeoutException || ex is HttpRequestException || ex is IOException || ex is WebException;
     }
 
@@ -289,7 +289,7 @@ public sealed class ProxyHttpClientService
         return new ProxyTestItem
         {
             Name = target.Name,
-            Url = target.Url,
+            Url = TmdbUrlHelper.SanitizeUrl(target.Url),
             Proxied = proxied,
             Reachable = reachable,
             Success = success,

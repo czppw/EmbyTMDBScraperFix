@@ -80,12 +80,29 @@ define(['loading', 'emby-input', 'emby-button', 'emby-checkbox'], function (load
         libraries.forEach(function (lib, index) {
             var wrapper = document.createElement('div');
             wrapper.className = 'checkboxContainer';
-            wrapper.innerHTML = '' +
-                '<input type="checkbox" class="lib-enabled" data-index="' + index + '" ' + (lib.Enabled !== false ? 'checked' : '') + ' />' +
-                '<div class="checkboxText">' +
-                '<div><strong>' + (lib.Name || '未命名媒体库') + '</strong></div>' +
-                '<div class="fieldDescription">' + (lib.Path || lib.Id || '') + '</div>' +
-                '</div>';
+
+            var checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'lib-enabled';
+            checkbox.setAttribute('data-index', String(index));
+            checkbox.checked = lib.Enabled !== false;
+
+            var text = document.createElement('div');
+            text.className = 'checkboxText';
+
+            var title = document.createElement('div');
+            var strong = document.createElement('strong');
+            strong.textContent = lib.Name || '未命名媒体库';
+            title.appendChild(strong);
+
+            var detail = document.createElement('div');
+            detail.className = 'fieldDescription';
+            detail.textContent = lib.Path || lib.Id || '';
+
+            text.appendChild(title);
+            text.appendChild(detail);
+            wrapper.appendChild(checkbox);
+            wrapper.appendChild(text);
             list.appendChild(wrapper);
         });
     }

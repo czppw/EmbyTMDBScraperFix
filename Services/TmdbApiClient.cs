@@ -99,7 +99,7 @@ public sealed class TmdbApiClient
         }
         catch (Exception ex)
         {
-            _log.Error($"TMDB request failed: {url}. ProxyEnabled={cfg.ProxyEnabled}, ProxyHost={cfg.ProxyHost}, ProxyPort={cfg.ProxyPort}", ex);
+            _log.Error($"TMDB request failed: {TmdbUrlHelper.SanitizeUrl(url)}. ProxyEnabled={cfg.ProxyEnabled}, ProxyHost={cfg.ProxyHost}, ProxyPort={cfg.ProxyPort}", ex);
             throw;
         }
     }

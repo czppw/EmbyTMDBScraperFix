@@ -25,7 +25,7 @@ public sealed class IncrementalScanService : IDisposable
     private readonly object _gate = new();
     private readonly Dictionary<string, ChangeEntry> _pendingChanges = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, FileSystemWatcher> _watchers = new(StringComparer.OrdinalIgnoreCase);
-    private volatile bool _running;
+    private int _running;
 
     private static readonly HashSet<string> MediaExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -95,17 +95,18 @@ public sealed class IncrementalScanService : IDisposable
 
     public async Task<IncrementalScanResult> RunOnceAsync(PluginConfiguration cfg, CancellationToken cancellationToken)
     {
-        if (_running) return new IncrementalScanResult { Message = "Previous scan is still running; skipped." };
-        _running = true;
+        if (Interlocked.Exchange(ref _running, 1) == 1) return new IncrementalScanResult { Message = "Previous scan is still running; skipped." };
         try
         {
             var result = new IncrementalScanResult { StartedAt = DateTimeOffset.Now };
             if (!cfg.AutoScanEnabled) { result.Message = "Auto scan disabled."; return result; }
 
             List<ChangeEntry> batch;
+            Dictionary<string, ChangeEntry> batchMap;
             lock (_gate)
             {
                 batch = _pendingChanges.Values.OrderBy(x => x.TimestampUtc).ToList();
+                batchMap = batch.ToDictionary(x => x.Path, StringComparer.OrdinalIgnoreCase);
                 _pendingChanges.Clear();
                 SavePendingChanges_NoLock();
             }
@@ -135,7 +136,28 @@ public sealed class IncrementalScanService : IDisposable
                 _libraryManager.QueueLibraryScan();
                 if (cfg.AutoMetadataRefresh)
                 {
-                    await TriggerMetadataRefreshAsync(result, cfg, cancellationToken).ConfigureAwait(false);
+                    var failedPaths = await TriggerMetadataRefreshAsync(result, cfg, cancellationToken).ConfigureAwait(false);
+                    if (failedPaths.Count > 0)
+                    {
+                        lock (_gate)
+                        {
+                            foreach (var path in failedPaths)
+                            {
+                                if (batchMap.TryGetValue(path, out var entry))
+                                {
+                                    _pendingChanges[path] = new ChangeEntry(entry.Path, entry.Kind, DateTime.UtcNow);
+                                }
+                                else
+                                {
+                                    _pendingChanges[path] = new ChangeEntry(path, ChangeKind.Modified, DateTime.UtcNow);
+                                }
+                            }
+
+                            SavePendingChanges_NoLock();
+                        }
+
+                        _log.Warn($"Metadata refresh incomplete. Re-queued {failedPaths.Count} path(s) for a later retry.");
+                    }
                 }
             }
             else
@@ -154,7 +176,7 @@ public sealed class IncrementalScanService : IDisposable
         }
         finally
         {
-            _running = false;
+            Interlocked.Exchange(ref _running, 0);
         }
     }
 
@@ -193,34 +215,65 @@ public sealed class IncrementalScanService : IDisposable
         return MediaExtensions.Contains(Path.GetExtension(path));
     }
 
-    private async Task TriggerMetadataRefreshAsync(IncrementalScanResult result, PluginConfiguration cfg, CancellationToken cancellationToken)
+    private async Task<List<string>> TriggerMetadataRefreshAsync(IncrementalScanResult result, PluginConfiguration cfg, CancellationToken cancellationToken)
     {
-        var changed = result.Added.Concat(result.Modified).Distinct(StringComparer.OrdinalIgnoreCase).Take(500).ToList();
-        foreach (var file in changed)
+        var remaining = new HashSet<string>(
+            result.Added.Concat(result.Modified).Distinct(StringComparer.OrdinalIgnoreCase).Take(500),
+            StringComparer.OrdinalIgnoreCase);
+        var maxAttempts = Math.Max(1, cfg.MaxScrapeRetryCount + 1);
+
+        for (var attempt = 1; attempt <= maxAttempts && remaining.Count > 0; attempt++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
+            foreach (var file in remaining.ToList())
             {
-                var item = _libraryManager.FindByPath(file, false) ?? _libraryManager.FindByPath(Path.GetDirectoryName(file) ?? file, false);
-                if (item == null) { _log.Info($"Metadata refresh deferred until Emby indexes file: {file}"); continue; }
-                var options = new MetadataRefreshOptions(_fileSystem)
+                cancellationToken.ThrowIfCancellationRequested();
+                try
                 {
-                    MetadataRefreshMode = MetadataRefreshMode.FullRefresh,
-                    ImageRefreshMode = MetadataRefreshMode.FullRefresh,
-                    ReplaceAllMetadata = false,
-                    EnableRemoteContentProbe = true,
-                    IsAutomated = true,
-                    Recursive = false,
-                    EnableSubtitleDownloading = true
-                };
-                await _providerManager.RefreshFullItem(item, options, cancellationToken).ConfigureAwait(false);
-                _log.Info($"Metadata refresh completed: {item.Name} ({file})");
+                    var item = _libraryManager.FindByPath(file, false) ?? _libraryManager.FindByPath(Path.GetDirectoryName(file) ?? file, false);
+                    if (item == null)
+                    {
+                        if (attempt == maxAttempts)
+                        {
+                            _log.Warn($"Metadata refresh still deferred after {attempt} attempt(s): {file}");
+                        }
+
+                        continue;
+                    }
+
+                    var options = new MetadataRefreshOptions(_fileSystem)
+                    {
+                        MetadataRefreshMode = MetadataRefreshMode.FullRefresh,
+                        ImageRefreshMode = MetadataRefreshMode.FullRefresh,
+                        ReplaceAllMetadata = false,
+                        EnableRemoteContentProbe = true,
+                        IsAutomated = true,
+                        Recursive = false,
+                        EnableSubtitleDownloading = true
+                    };
+                    await _providerManager.RefreshFullItem(item, options, cancellationToken).ConfigureAwait(false);
+                    remaining.Remove(file);
+                    _log.Info($"Metadata refresh completed: {item.Name} ({file})");
+                }
+                catch (Exception ex)
+                {
+                    if (attempt == maxAttempts)
+                    {
+                        _log.Warn($"Metadata refresh failed after {attempt} attempt(s): {file}; {ex.Message}");
+                    }
+                    else
+                    {
+                        _log.Warn($"Metadata refresh attempt {attempt} failed and will retry: {file}; {ex.Message}");
+                    }
+                }
             }
-            catch (Exception ex)
+
+            if (remaining.Count > 0 && attempt < maxAttempts)
             {
-                _log.Warn($"Metadata refresh failed and will be retried by later change events: {file}; {ex.Message}");
+                await Task.Delay(TimeSpan.FromSeconds(Math.Min(10, 2 * attempt)), cancellationToken).ConfigureAwait(false);
             }
         }
+
+        return remaining.ToList();
     }
 
     private IEnumerable<LibraryRoot> GetEnabledRoots(PluginConfiguration cfg)
