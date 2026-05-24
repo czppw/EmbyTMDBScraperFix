@@ -80,7 +80,7 @@ internal static class TmdbUrlHelper
         if (!string.IsNullOrWhiteSpace(builder.Query))
         {
             var pairs = builder.Query.TrimStart('?')
-                .Split('&', StringSplitOptions.RemoveEmptyEntries)
+                .Split(new[] { '&' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(static part =>
                 {
                     var idx = part.IndexOf('=');
