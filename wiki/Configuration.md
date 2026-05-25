@@ -2,56 +2,46 @@
 
 ## TMDB
 
-- `TMDB API Key`：必填
-- `TMDB Language`：建议 `zh-CN`
-- `TMDB Region`：建议按实际地区设置
-- `EnableAdultMetadata`：按需开启
-
-## TVDB 回退
-
-- `EnableTvdbFallback`
-- `TvdbApiKey`
-- `TvdbPin`
-- `TvdbLanguage`
-
-仅当 TMDB 数据不完整或希望多源回退时开启。
-
-## 代理
-
-- `ProxyEnabled`
-- `ProxyHost`
-- `ProxyPort`
-- `ProxyUsername`
-- `ProxyPassword`
-- `EnableLegacyGlobalProxyHook`
+- `TMDB API Key`
+- `TMDB API 地址`
+- `TMDB 图片地址`
+- `TMDB 语言`
+- `TMDB 回退语言`
+- `TMDB 区域`
+- `启用成人内容搜索`
 
 说明：
 
-- 当前主要支持 `HTTP Proxy`
-- 推荐优先使用插件内部代理，不建议默认开启高风险全局 Hook
+- `TMDB 图片地址` 可单独指向反代或 CDN
+- `TMDB 回退语言` 用于补全标题、简介和人物简介
+
+## 中文搜索增强
+
+- `启用中文搜索增强`
+- `启用标题规范化`
+- `启用简繁回退`
+- `启用路径与别名搜索回退`
+- `最大搜索变体数`
+- `输出详细搜索诊断日志`
+
+说明：
+
+- 标题规范化会清理分辨率、编码、帧率、音频等技术标签
+- 详细搜索诊断会输出 `TMDB search selected` 和 `TMDB search rejected`
+
+## 代理
+
+- `启用 HTTP 代理`
+- `代理地址`
+- `代理端口`
+- `用户名`
+- `密码`
+- `启用旧版全局代理 Hook`
 
 ## 自动扫描
 
-- `AutoScanEnabled`
-- `ScanIntervalMinutes`
-- `AutoMetadataRefresh`
-- `MaxScrapeRetryCount`
-- `Libraries`
-
-建议：
-
-- 扫描间隔不低于 `1` 分钟
-- `.strm` 环境建议开启自动元数据刷新
-- 仅勾选需要监控的媒体库
-
-## 库内抓取器建议
-
-电影：
-
-- `Metadata Fetchers`: `EmbyTMDBScraperFix TMDB Movie`
-- `Image Fetchers`: 插件图片提供器
-
-剧集：
-
-- `Metadata Fetchers`: `EmbyTMDBScraperFix TMDB Series`
-- `Image Fetchers`: 插件图片提供器
+- `启用自动增量扫描`
+- `扫描间隔（分钟）`
+- `检测到变更后自动刷新元数据`
+- `最大重试次数`
+- `媒体库`
